@@ -109,7 +109,6 @@ def logout():
 
 DATA_FILE    = os.path.join(BASE_DIR, 'attendance_data.json')
 ANNOUNCE_FILE = os.path.join(BASE_DIR, 'announcements.json')
-MESSAGES_FILE = os.path.join(BASE_DIR, 'messages.json')
 STARTUP_FLAG = os.path.join(BASE_DIR, '.startup_done')
 
 SCHEDULES = {

@@ -36,3 +36,6 @@ dist/
 
 afaq_attendance_enhanced.py
 afaq_attendance_full.py
+
+messages.json
+qr_state.json
