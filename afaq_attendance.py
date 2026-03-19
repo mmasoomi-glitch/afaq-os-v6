@@ -36,13 +36,11 @@ try:
 except:
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
-AUTH_USER = os.environ.get('AFAQ_USER') or ''
-AUTH_PASS = os.environ.get('AFAQ_PASS') or ''
+AUTH_USER = ''
+AUTH_PASS = ''
 
 def _authed():
-    if not AUTH_USER or not AUTH_PASS:
-        return True
-    return session.get('auth') is True
+    return True
 
 def _guard(api=False):
     if _authed():
