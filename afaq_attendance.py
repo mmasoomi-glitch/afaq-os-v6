@@ -1,136 +1,67 @@
 import json, os, sys, threading, webbrowser, socket, platform, subprocess, requests
+import google.generativeai as genai
 from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, Response, jsonify, redirect, session
 
 app = Flask(__name__)
+manager_app = Flask('manager')
+
 PORT = 3456
+MANAGER_PORT = 6789
 BASE_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
 
 def _load_dotenv(env_path):
     try:
-        if not os.path.exists(env_path):
-            return
+        if not os.path.exists(env_path): return
         with open(env_path, 'r', encoding='utf-8') as f:
             for raw in f:
                 line = raw.strip()
-                if not line or line.startswith('#'):
-                    continue
-                if '=' not in line:
-                    continue
+                if not line or line.startswith('#') or '=' not in line: continue
                 k, v = line.split('=', 1)
                 k = k.strip()
                 v = v.strip().strip('"').strip("'")
-                if not k:
-                    continue
-                if os.environ.get(k) is None:
-                    os.environ[k] = v
-    except:
-        return
+                if k and os.environ.get(k) is None: os.environ[k] = v
+    except: return
 
 _load_dotenv(os.path.join(BASE_DIR, '.env'))
 
+API_KEY = os.environ.get('GEMINI_API_KEY')
+if API_KEY and API_KEY != 'your_key_here':
+    genai.configure(api_key=API_KEY)
+    ai_model = genai.GenerativeModel('gemini-2.5-flash')
+else:
+    ai_model = None
+
 app.secret_key = os.environ.get('FLASK_SECRET') or 'change_me'
-app.config['SESSION_PERMANENT'] = True
-try:
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=int(os.environ.get('SESSION_DAYS') or '30'))
-except:
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
-
-AUTH_USER = ''
-AUTH_PASS = ''
-
-def _authed():
-    return True
-
-def _guard(api=False):
-    if _authed():
-        return None
-    if api:
-        return jsonify({"success": False, "error": "unauthorized"}), 401
-    return redirect('/login', code=302)
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if _authed():
-        return redirect('/', code=302)
-
-    err = ''
-    if request.method == 'POST':
-        user = (request.form.get('user') or '').strip()
-        pw = (request.form.get('pass') or '').strip()
-        remember = request.form.get('remember') == '1'
-
-        if user == AUTH_USER and pw == AUTH_PASS:
-            session['auth'] = True
-            session.permanent = remember
-            return redirect('/', code=302)
-        err = 'Invalid login'
-
-    html = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Afaq Attendance Login</title>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Share Tech Mono',monospace;background:#080d1a;color:#dde8ff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px}
-    .card{width:100%;max-width:420px;background:#0d1726;border:1px solid #1e3a5f;border-radius:14px;padding:18px}
-    .title{font-family:'Orbitron',sans-serif;letter-spacing:2px;color:#f0c040;margin-bottom:14px}
-    .row{margin-bottom:12px}
-    input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #1e3a5f;background:#080d1a;color:#dde8ff;font-family:'Share Tech Mono',monospace}
-    button{width:100%;padding:10px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#00c853,#1de9b6);color:#001a0e;font-weight:bold;cursor:pointer}
-    .err{margin:10px 0 0;color:#ff7f9b}
-    label{display:flex;align-items:center;gap:8px;font-size:.85em;color:#7fd1fc}
-    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#101b22;border:1px solid #1f2c33;color:#dde8ff;font-size:.75em;margin-top:12px}
-  </style>
-</head>
-<body>
-  <form class="card" method="POST">
-    <div class="title">AFAQ ATTENDANCE</div>
-    <div class="row"><input name="user" placeholder="Username" autocomplete="username" required></div>
-    <div class="row"><input name="pass" placeholder="Password" type="password" autocomplete="current-password" required></div>
-    <div class="row"><label><input type="checkbox" name="remember" value="1" checked> Remember me</label></div>
-    <button type="submit">Login</button>
-    {% if err %}<div class="err">{{ err }}</div>{% endif %}
-    <div class="pill">http://{{ local_ip }}:{{ port }}</div>
-  </form>
-</body>
-</html>
-    """
-    return render_template_string(html, err=err, local_ip=get_local_ip(), port=PORT)
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect('/login', code=302)
+manager_app.secret_key = app.secret_key
 
 DATA_FILE    = os.path.join(BASE_DIR, 'attendance_data.json')
 ANNOUNCE_FILE = os.path.join(BASE_DIR, 'announcements.json')
-STARTUP_FLAG = os.path.join(BASE_DIR, '.startup_done')
 
 SCHEDULES = {
     "team": [
-        {"label": "Morning In",  "time": "10:00"},
-        {"label": "Morning Out", "time": "15:30"},
-        {"label": "Evening In",  "time": "19:30"},
-        {"label": "Evening Out", "time": "22:30"},
+        {"label": "Morning In",  "time": "09:30"},
+        {"label": "Morning Out", "time": "14:00"},
+        {"label": "Evening In",  "time": "16:30"},
+        {"label": "Evening Out", "time": "21:00"},
     ],
 }
+
+def get_today_schedule(team_type):
+    base = SCHEDULES.get(team_type) or []
+    if datetime.now().weekday() == 4:
+        out = []
+        for s in base:
+            if s.get('label') == 'Morning Out': out.append({"label": s.get("label"), "time": "12:00"})
+            else: out.append({"label": s.get("label"), "time": s.get("time")})
+        return out
+    return base
 
 EMPLOYEES = [
     {"name": "Hafiz",    "type": "team"},
     {"name": "Mehriban", "type": "team"},
     {"name": "Nadir",    "type": "team"},
 ]
-
-overtime_flags = {}
-SESSION_MAP = {"Morning In": "morning", "Evening In": "evening", "Morning Out": "morning", "Evening Out": "evening"}
-
-def declare_overtime(employee, date, session): overtime_flags[(employee, date, session)] = True
-def has_overtime(employee, date, session): return overtime_flags.get((employee, date, session), False)
 
 def get_local_ip():
     try:
@@ -160,256 +91,264 @@ def get_today_logs():
         except: return []
     return [l for l in logs if l.get("date") == today]
 
+REQUIRED_LABELS = ["Morning In", "Morning Out", "Evening In", "Evening Out"]
+
+def get_monthly_kpi(emp_name):
+    now = datetime.now()
+    current_month_prefix = now.strftime("%Y-%m")
+    if not os.path.exists(DATA_FILE): return {"pct": 0, "color": "#ef4444", "text": "0%"}
+    with open(DATA_FILE, 'r') as f:
+        try: logs = json.load(f)
+        except: logs = []
+    emp_logs = [l for l in logs if l.get("employee") == emp_name and l.get("date", "").startswith(current_month_prefix)]
+    active_dates = sorted(list(set(l.get("date") for l in emp_logs)))
+    if not active_dates: return {"pct": 0.0, "color": "#ef4444", "text": "0.0%"}
+    start_day = int(active_dates[0].split("-")[2])
+    expected_shifts = 0
+    for d in range(start_day, now.day + 1):
+        if d < now.day: expected_shifts += len(REQUIRED_LABELS)
+        elif d == now.day:
+            for s in get_today_schedule("team"):
+                h, m = map(int, s["time"].split(":"))
+                shift_time = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                if now > shift_time: expected_shifts += 1
+    daily_completed = {}
+    for l in emp_logs:
+        d = l.get("date")
+        lbl = l.get("label")
+        if lbl in REQUIRED_LABELS: daily_completed.setdefault(d, set()).add(lbl)
+    completed = sum(len(labels) for labels in daily_completed.values())
+    pct = (completed / expected_shifts * 100.0) if expected_shifts > 0 else 100.0
+    if pct >= 90: color = "var(--brand-green)"
+    elif pct >= 75: color = "var(--brand-peach)"
+    else: color = "#ef4444" 
+    return {"pct": round(pct, 1), "color": color, "text": f"{round(pct, 1)}%"}
+
 def is_within_window(t, before_mins=15, after_mins=15):
     now = datetime.now()
     h, m = map(int, t.split(":"))
     target = datetime.combine(now.date(), datetime.min.time().replace(hour=h, minute=m))
     return (target - timedelta(minutes=before_mins)) <= now <= (target + timedelta(minutes=after_mins))
 
-@app.route('/api/ai/chat', methods=['POST'])
-def api_ai_chat():
-    g = _guard(api=True)
-    if g: return g
-    api_key = os.environ.get('DEEPSEEK_API_KEY')
-    if not api_key:
-        return jsonify({"success": False, "error": "missing_api_key"}), 500
+# ---------------------------------------------------------
+# HTML TEMPLATES
+# ---------------------------------------------------------
+COMMON_CSS = """
+:root { --brand-peach: #ffd6a5; --brand-green: #b8d58d; --brand-purple: #bdb2ff; --bg-dark: #0f172a; --text-light: #f8fafc; }
+body { font-family: 'Montserrat', sans-serif; background-color: var(--bg-dark); color: var(--text-light); min-height: 100vh; padding: 0 0 40px; margin: 0; }
+.glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(189, 178, 255, 0.3); border-radius: 1rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); padding: 1.5rem; }
+.btn-primary { background: linear-gradient(135deg, var(--brand-green), var(--brand-purple)); color: #001a0e; font-weight: bold; border: none; border-radius: 0.5rem; padding: 0.75rem 1rem; cursor: pointer; transition: transform 0.2s, filter 0.2s; display: block; width: 100%; margin: 8px 0; text-decoration: none; text-align: center; box-sizing: border-box; }
+.btn-primary:hover { transform: translateY(-2px); filter: brightness(1.1); }
+.btn-off { background: rgba(30, 41, 59, 0.4); border: 1px dashed rgba(189, 178, 255, 0.4); color: rgba(248, 250, 252, 0.4); border-radius: 0.5rem; padding: 0.75rem 1rem; cursor: not-allowed; display: block; width: 100%; margin: 8px 0; font-weight: 600; text-align: center; box-sizing: border-box; }
+.brand-logo { max-height: 48px; width: auto; object-fit: contain; margin: 0 auto 10px auto; display: block; }
+.importance { padding: 14px 20px; text-align: center; border-bottom: 1px solid rgba(189, 178, 255, 0.35); background: rgba(30,41,59,0.55); }
+.importance-text { font-size: .85em; color: var(--text-light); letter-spacing: 1px; line-height: 1.7; }
+.header { padding: 24px 16px 24px; text-align: center; }
+.clock { font-weight: 800; font-size: 2.2em; margin-bottom: 10px; }
+.net-banner { max-width: 400px; margin: 0 auto 20px; text-align: center; padding: 10px; }
+.net-link { font-weight: 800; font-size: 1.1em; color: var(--brand-peach); text-decoration: none; }
+.grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-bottom: 32px; padding: 0 16px; }
+.card { flex: 1; min-width: 220px; max-width: 260px; text-align: center; }
+.emp { font-weight: 800; font-size: 1.2em; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(189, 178, 255, 0.25); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.kpi-badge { font-size: 0.65em; padding: 4px 10px; border: 1px solid; border-radius: 12px; background: rgba(15, 23, 42, 0.5); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+.logs-wrap { max-width: 760px; margin: 0 auto 32px; padding: 0 16px; }
+.log-box { padding: 14px 18px; }
+.log-row { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(189,178,255,0.18); font-size: .9em; }
+.log-row:last-child { border-bottom: none; }
+.l-emp { font-weight: 800; color: var(--brand-peach); }
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 0.75rem; font-size: .9em; z-index: 999; background: rgba(30,41,59,0.95); color: var(--text-light); border: 1px solid rgba(189,178,255,0.5); font-weight: 600; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+.shift-readonly { padding: 8px; margin: 4px 0; background: rgba(30,41,59,0.4); border-radius: 6px; font-size: 0.9em; border: 1px solid rgba(189,178,255,0.1); }
+.ticker-wrap { width: 100%; overflow: hidden; background: rgba(15, 23, 42, 0.9); border-bottom: 1px solid rgba(189,178,255,0.2); padding: 8px 0; box-sizing: border-box; }
+.ticker { display: inline-block; white-space: nowrap; padding-left: 100%; animation: ticker 30s linear infinite; }
+.ticker-item { display: inline-block; padding: 0 2rem; font-weight: 600; font-size: 0.9em; color: var(--brand-peach); border-right: 1px solid rgba(248,250,252,0.2); }
+.ticker-item:last-child { border-right: none; }
+@keyframes ticker { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-100%, 0, 0); } }
+"""
 
-    payload = request.get_json(silent=True) or {}
-    user_text = (payload.get('message') or '').strip()
-    if not user_text:
-        return jsonify({"success": False, "error": "empty_message"}), 400
+EMPLOYEE_HTML = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Afaq Attendance - Staff</title><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;800&display=swap" rel="stylesheet"><style>{COMMON_CSS}</style></head><body>
+<div style="text-align:center; padding-top: 10px; background: rgba(30,41,59,0.55);">
+  <a href="/ai" class="btn-primary" style="display:inline-block; width:auto; padding:6px 20px; border-radius:20px; font-size:0.85em;">🤖 Office AI Assistant</a>
+</div>
+<div class="importance"><div class="importance-text">⚠️ <strong>MANDATORY — ALL STAFF MUST CLOCK IN AND OUT</strong></div></div>
+<div class="header">
+  <img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0911/0215/0954/files/Afaq_official_logo.png?v=1770887488" alt="Logo">
+  <div class="clock">{{{{ now_time }}}}</div>
+  <div class="net-banner glass-card"><div class="net-link">http://{{{{ local_ip }}}}:{{{{ port }}}}</div></div>
+</div>
+<div class="grid">
+{{% for emp in employees %}}
+<div class="card glass-card">
+  <div class="emp">{{{{ emp.name }}}}<div class="kpi-badge" style="color: {{{{ emp.kpi.color }}}}; border-color: {{{{ emp.kpi.color }}}};">{{{{ emp.kpi.text }}}} Monthly KPI</div></div>
+  {{% for s in emp.shifts %}}
+    {{% if s.active %}}
+    <form method="POST"><input type="hidden" name="employee" value="{{{{ emp.name }}}}"><input type="hidden" name="label" value="{{{{ s.label }}}}"><input type="hidden" name="time" value="{{{{ s.time }}}}"><button type="submit" class="btn-primary">▶ {{{{ s.label }}}} ({{{{ s.time }}}})</button></form>
+    {{% else %}}<button class="btn-off" disabled>🔒 {{{{ s.label }}}} ({{{{ s.time }}}})</button>{{% endif %}}
+  {{% endfor %}}
+</div>
+{{% endfor %}}
+</div>
+<div class="logs-wrap"><div class="log-box glass-card"><div style="margin-bottom: 10px; font-weight: 800; color: var(--brand-purple);">Today's Logs</div>
+    {{% for l in today_logs %}}<div class="log-row"><span class="l-emp">{{{{ l.employee }}}}</span><span>{{{{ l.label }}}}</span><span style="margin-left:auto">{{{{ l.timestamp }}}}</span></div>{{% else %}}<div style="font-size: 0.85em; opacity: 0.7;">No entries yet today.</div>{{% endfor %}}
+</div></div>
+{{% if message %}}<div class="toast">{{{{ message }}}}</div><script>setTimeout(()=>{{document.querySelector('.toast').remove()}},4000)</script>{{% endif %}}
+<script>setInterval(() => {{ location.reload(); }}, 60000);</script></body></html>"""
 
-    try:
-        resp = requests.post(
-            'https://api.deepseek.com/chat/completions',
-            headers={
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'model': 'deepseek-chat',
-                'messages': [
-                    {"role": "system", "content": "You are an assistant for staff inside an attendance dashboard. Be concise and practical."},
-                    {"role": "user", "content": user_text},
-                ],
-                'temperature': 0.2,
-            },
-            timeout=30,
-        )
-        data = resp.json()
-        if resp.status_code >= 400:
-            return jsonify({"success": False, "error": data}), 502
+MANAGER_HTML = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Afaq Attendance - Executive Dashboard</title><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;800&display=swap" rel="stylesheet"><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><style>
+:root { --brand-peach: #ffd6a5; --brand-green: #b8d58d; --brand-purple: #bdb2ff; --bg-dark: #0f172a; --text-light: #f8fafc; }
+body { font-family: 'Montserrat', sans-serif; background-color: var(--bg-dark); color: var(--text-light); min-height: 100vh; padding: 0 0 40px; margin: 0; }
+.glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(189, 178, 255, 0.3); border-radius: 1rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); padding: 1.5rem; }
+.btn-primary { background: linear-gradient(135deg, var(--brand-green), var(--brand-purple)); color: #001a0e; font-weight: bold; border: none; border-radius: 0.5rem; padding: 0.75rem 1rem; cursor: pointer; transition: transform 0.2s, filter 0.2s; display: block; width: 100%; margin: 8px 0; text-decoration: none; text-align: center; box-sizing: border-box; }
+.btn-primary:hover { transform: translateY(-2px); filter: brightness(1.1); }
+.btn-off { background: rgba(30, 41, 59, 0.4); border: 1px dashed rgba(189, 178, 255, 0.4); color: rgba(248, 250, 252, 0.4); border-radius: 0.5rem; padding: 0.75rem 1rem; cursor: not-allowed; display: block; width: 100%; margin: 8px 0; font-weight: 600; text-align: center; box-sizing: border-box; }
+.brand-logo { max-height: 48px; width: auto; object-fit: contain; margin: 0 auto 10px auto; display: block; }
+.importance { padding: 14px 20px; text-align: center; border-bottom: 1px solid rgba(189, 178, 255, 0.35); background: rgba(30,41,59,0.55); }
+.importance-text { font-size: .85em; color: var(--text-light); letter-spacing: 1px; line-height: 1.7; }
+.header { padding: 24px 16px 24px; text-align: center; }
+.clock { font-weight: 800; font-size: 2.2em; margin-bottom: 10px; }
+.net-banner { max-width: 400px; margin: 0 auto 20px; text-align: center; padding: 10px; }
+.net-link { font-weight: 800; font-size: 1.1em; color: var(--brand-peach); text-decoration: none; }
+.grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-bottom: 32px; padding: 0 16px; }
+.card { flex: 1; min-width: 220px; max-width: 260px; text-align: center; }
+.emp { font-weight: 800; font-size: 1.2em; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(189, 178, 255, 0.25); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.kpi-badge { font-size: 0.65em; padding: 4px 10px; border: 1px solid; border-radius: 12px; background: rgba(15, 23, 42, 0.5); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+.logs-wrap { max-width: 760px; margin: 0 auto 32px; padding: 0 16px; }
+.log-box { padding: 14px 18px; }
+.log-row { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(189,178,255,0.18); font-size: .9em; }
+.log-row:last-child { border-bottom: none; }
+.l-emp { font-weight: 800; color: var(--brand-peach); }
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 0.75rem; font-size: .9em; z-index: 999; background: rgba(30,41,59,0.95); color: var(--text-light); border: 1px solid rgba(189,178,255,0.5); font-weight: 600; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+.shift-readonly { padding: 8px; margin: 4px 0; background: rgba(30,41,59,0.4); border-radius: 6px; font-size: 0.9em; border: 1px solid rgba(189,178,255,0.1); }
+.ticker-wrap { width: 100%; overflow: hidden; background: rgba(15, 23, 42, 0.9); border-bottom: 1px solid rgba(189,178,255,0.2); padding: 8px 0; box-sizing: border-box; }
+.ticker { display: inline-block; white-space: nowrap; padding-left: 100%; animation: ticker 30s linear infinite; }
+.ticker-item { display: inline-block; padding: 0 2rem; font-weight: 600; font-size: 0.9em; color: var(--brand-peach); border-right: 1px solid rgba(248,250,252,0.2); }
+.ticker-item:last-child { border-right: none; }
+@keyframes ticker { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-100%, 0, 0); } }
+</style></head><body>
 
-        answer = ''
-        try:
-            answer = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-        except:
-            answer = ''
-        return jsonify({"success": True, "answer": answer})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 502
-
-@app.route('/ai')
-def ai_page():
-    g = _guard(api=False)
-    if g: return g
-    html = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Afaq AI Assistant</title>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Share Tech Mono',monospace;background:#080d1a;color:#dde8ff;min-height:100vh;padding:18px}
-    .wrap{max-width:980px;margin:0 auto}
-    .top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap}
-    .title{font-family:'Orbitron',sans-serif;letter-spacing:2px;color:#f0c040}
-    .btn{padding:10px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#00c853,#1de9b6);color:#001a0e;font-weight:bold;cursor:pointer;text-decoration:none;display:inline-block}
-    .panel{border:1px solid #1e3a5f;border-radius:14px;overflow:hidden;background:#0d1726}
-    .chat{height:65vh;overflow:auto;padding:14px}
-    .msg{border:1px solid #111d30;background:#080d1a;border-radius:12px;padding:10px 12px;margin-bottom:10px}
-    .meta{font-size:.72em;color:#7fd1fc;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px}
-    .who{color:#f0c040;font-weight:bold}
-    .text{white-space:pre-wrap;word-break:break-word;font-size:.85em}
-    .bar{display:flex;gap:10px;padding:14px;border-top:1px solid #111d30;flex-wrap:wrap}
-    textarea{flex:1;min-width:240px;padding:10px 12px;border-radius:10px;border:1px solid #1e3a5f;background:#080d1a;color:#dde8ff;font-family:'Share Tech Mono',monospace}
-    button{padding:10px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#00c853,#1de9b6);color:#001a0e;font-weight:bold;cursor:pointer}
-    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#101b22;border:1px solid #1f2c33;color:#dde8ff;font-size:.75em}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="top">
-      <div>
-        <div class="title">AFAQ AI ASSISTANT</div>
-        <div class="pill">Local access: http://{{ local_ip }}:{{ port }}/ai</div>
-      </div>
-      <a class="btn" href="/">Back to Attendance</a>
-    </div>
-
-    <div class="panel">
-      <div id="chat" class="chat"></div>
-      <div class="bar">
-        <textarea id="input" rows="3" placeholder="Ask the AI..."></textarea>
-        <button id="send" onclick="sendMsg()">Send</button>
-        <span id="status" class="pill">ready</span>
-      </div>
-    </div>
+<div class="ticker-wrap">
+  <div class="ticker">
+    <span class="ticker-item">🌤️ Dubai: 38°C, Clear</span>
+    <span class="ticker-item">💱 USD/AED: 3.67</span>
+    <span class="ticker-item">💱 EUR/AED: 4.05</span>
+    <span class="ticker-item">📈 DFMGI: 4,215.30 (+1.2%)</span>
+    <span class="ticker-item">🛢️ Brent Crude: $82.50</span>
+    <span class="ticker-item">🚗 E11 SZR: Heavy Traffic Southbound</span>
+    <span class="ticker-item">📉 Gold (Ounce): $2,340.10</span>
   </div>
-
-<script>
-function nowStr(){
-  const d=new Date();
-  return d.toISOString().replace('T',' ').slice(0,19);
-}
-
-function addMsg(who, text){
-  const chat=document.getElementById('chat');
-  const el=document.createElement('div');
-  el.className='msg';
-  el.innerHTML=`<div class="meta"><span class="who">${who}</span><span>${nowStr()}</span></div><div class="text"></div>`;
-  el.querySelector('.text').textContent=text;
-  chat.appendChild(el);
-  chat.scrollTop=chat.scrollHeight;
-}
-
-async function sendMsg(){
-  const input=document.getElementById('input');
-  const btn=document.getElementById('send');
-  const status=document.getElementById('status');
-  const text=input.value.trim();
-  if(!text) return;
-  addMsg('You', text);
-  input.value='';
-  btn.disabled=true;
-  status.textContent='thinking...';
-  try{
-    const r=await fetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});
-    const j=await r.json();
-    if(j && j.success){
-      addMsg('AI', j.answer || '');
-      status.textContent='ready';
-    } else {
-      addMsg('AI', `Error: ${j && j.error ? JSON.stringify(j.error) : 'unknown'}`);
-      status.textContent='error';
-    }
-  }catch(e){
-    addMsg('AI', `Error: ${e}`);
-    status.textContent='error';
-  }
-  btn.disabled=false;
-}
-
-document.getElementById('input').addEventListener('keydown', (e)=>{
-  if(e.key==='Enter' && !e.shiftKey){
-    e.preventDefault();
-    sendMsg();
-  }
-});
-
-addMsg('AI', 'Hello. Ask me anything you need for work.');
-</script>
-</body>
-</html>
-    """
-    return render_template_string(html, local_ip=LOCAL_IP, port=PORT)
-
-@app.route('/assistant')
-def assistant_alias():
-    return redirect('/ai', code=302)
-
-HTML = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Afaq Attendance</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Share Tech Mono',monospace;background:#080d1a;color:#dde8ff;min-height:100vh;padding:0 0 40px}
-.importance{background:linear-gradient(90deg,#7b0000,#c0392b,#7b0000);padding:14px 20px;text-align:center;border-bottom:2px solid #ff4444;}
-.importance-text{font-family:'Orbitron',sans-serif;font-size:.78em;color:#fff;letter-spacing:2px;line-height:1.7}
-.header{padding:24px 16px 8px;text-align:center}
-h1{font-family:'Orbitron',sans-serif;font-size:1.75em;color:#f0c040;letter-spacing:4px}
-.clock{font-family:'Orbitron',sans-serif;font-size:2em;color:#7fd1fc}
-.net-banner{max-width:500px;margin:0 auto 20px;background:linear-gradient(135deg,#0a1f10,#0d2a1a);border:1px solid #00c853;border-radius:10px;padding:14px 20px;text-align:center}
-.net-link{font-family:'Orbitron',sans-serif;font-size:1.15em;color:#00e676}
-.grid{display:flex;flex-wrap:wrap;justify-content:center;gap:16px;margin-bottom:32px;padding:0 16px}
-.card{background:linear-gradient(160deg,#101d35,#0d1726);border:1px solid #1e3a5f;border-radius:12px;padding:18px 16px;flex:1;min-width:175px;max-width:215px}
-.emp{font-family:'Orbitron',sans-serif;font-size:.78em;color:#f0c040;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #1e3a5f}
-button{display:block;width:100%;padding:9px 12px;margin:5px 0;border:none;border-radius:6px;font-family:'Share Tech Mono',monospace;cursor:pointer}
-.btn-on{background:linear-gradient(135deg,#00c853,#1de9b6);color:#001a0e;font-weight:bold}
-.btn-off{background:#0d1726;color:#1e3a5f;cursor:not-allowed;border:1px solid #111d30}
-.logs-wrap{max-width:660px;margin:0 auto 32px;padding:0 16px}
-.log-box{background:#0d1726;border:1px solid #1e3a5f;border-radius:10px;padding:14px 18px}
-.log-row{display:flex;gap:10px;padding:6px 0;border-bottom:1px solid #111d30;font-size:.76em}
- .l-emp{color:#f0c040;font-weight:bold}
-
-.ai-float{position:fixed;right:18px;bottom:18px;z-index:1200;}
-.ai-float a{display:inline-block;padding:12px 14px;border-radius:999px;background:linear-gradient(135deg,#7fd1fc,#1de9b6);color:#001a0e;font-weight:bold;text-decoration:none;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-.ai-float a:hover{filter:brightness(1.05)}
-
-.toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:8px;font-size:.82em;z-index:999;background:#00c853;color:#001a0e;font-weight:bold}
-</style>
-</head>
-<body>
-
-<div class="importance">
-  <div class="importance-text">⚠️ <strong>MANDATORY — ALL STAFF MUST CLOCK IN AND OUT</strong></div>
 </div>
 
-<div class="header">
-  <h1>🌙 AFAQ ATTENDANCE</h1>
+<div style="text-align:center; padding-top: 15px;">
+  <a href="/ai" class="btn-primary" style="display:inline-block; width:auto; padding:10px 30px; border-radius:20px;">👑 Owner AI & Business Analyst</a>
+</div>
+<div class="header" style="padding-bottom: 10px;">
+  <img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0911/0215/0954/files/Afaq_official_logo.png?v=1770887488" alt="Logo">
   <div class="clock">{{ now_time }}</div>
-  <div class="net-banner">
-    <div class="net-link">http://{{ local_ip }}:{{ port }}</div>
-  </div>
-  <div style="max-width:500px;margin:10px auto 0;text-align:center;">
-    <a href="/ai" style="display:inline-block;padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,#7fd1fc,#1de9b6);color:#001a0e;font-weight:bold;text-decoration:none;">AI Assistant</a>
+</div>
+
+<div style="max-width: 900px; margin: 0 auto 20px; padding: 0 16px;">
+  <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div class="glass-card" style="flex: 2; min-width: 300px; padding: 1rem;">
+      <div style="margin-bottom: 10px; font-weight: 800; color: var(--brand-peach);">Shopify Sales & Fulfillments (7 Days)</div>
+      <div style="position: relative; height: 220px; width: 100%;"><canvas id="salesChart"></canvas></div>
+    </div>
+    <div class="glass-card" style="flex: 1; min-width: 250px; padding: 1rem;">
+      <div style="margin-bottom: 10px; font-weight: 800; color: var(--brand-green);">Warehouse Top 10</div>
+      <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85em; opacity: 0.9; line-height: 2.2;">
+        <li>1. Premium Item A <span style="float:right; color:var(--brand-green)">95% Stock</span></li>
+        <li>2. Standard Part B <span style="float:right; color:var(--brand-green)">82% Stock</span></li>
+        <li>3. Accessory Bundle C <span style="float:right; color:var(--brand-peach)">40% Stock</span></li>
+        <li>4. Fragile Unit D <span style="float:right; color:var(--brand-peach)">35% Stock</span></li>
+        <li>5. Clearance Item E <span style="float:right; color:#ef4444">10% Stock</span></li>
+        <li style="text-align:center; margin-top:10px; opacity:0.5;">(Pending API Integration)</li>
+      </ul>
+    </div>
   </div>
 </div>
 
 <div class="grid">
 {% for emp in employees %}
-<div class="card">
-  <div class="emp">{{ emp.name }}</div>
-  {% for s in emp.shifts %}
-    {% if s.active %}
-    <form method="POST"><input type="hidden" name="employee" value="{{ emp.name }}"><input type="hidden" name="label" value="{{ s.label }}"><input type="hidden" name="time" value="{{ s.time }}">
-      <button type="submit" class="btn-on">▶ {{ s.label }}<br>{{ s.time }}</button>
-    </form>
-    {% else %}<button class="btn-off" disabled>⬛ {{ s.label }}<br>{{ s.time }}</button>{% endif %}
-  {% endfor %}
+<div class="card glass-card">
+  <div class="emp">{{ emp.name }}<div class="kpi-badge" style="color: {{ emp.kpi.color }}; border-color: {{ emp.kpi.color }};">{{ emp.kpi.text }} Monthly KPI</div></div>
+  {% for s in emp.shifts %}<div class="shift-readonly">{{ s.label }} ({{ s.time }})</div>{% endfor %}
 </div>
 {% endfor %}
 </div>
+<div class="logs-wrap"><div class="log-box glass-card"><div style="margin-bottom: 10px; font-weight: 800; color: var(--brand-purple);">Today's Logs</div>
+    {% for l in today_logs %}<div class="log-row"><span class="l-emp">{{ l.employee }}</span><span>{{ l.label }}</span><span style="margin-left:auto">{{ l.timestamp }}</span></div>{% else %}<div style="font-size: 0.85em; opacity: 0.7;">No entries yet today.</div>{% endfor %}
+</div></div>
+<script>
+  const ctx = document.getElementById('salesChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      datasets: [{
+        label: 'Sales Velocity (AED)',
+        data: [12000, 19000, 15000, 22000, 18000, 25000, 21000],
+        borderColor: '#ffd6a5',
+        backgroundColor: 'rgba(255, 214, 165, 0.15)',
+        tension: 0.4, fill: true
+      },
+      {
+        label: 'Fulfillments',
+        data: [40, 55, 42, 60, 46, 70, 58],
+        borderColor: '#b8d58d',
+        tension: 0.4, borderDash: [5, 5]
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#f8fafc' }} }, scales: { x: { ticks: { color: '#f8fafc' } }, y: { ticks: { color: '#f8fafc' }} } }
+  });
+</script></body></html>"""
 
-<div class="logs-wrap">
-  <div class="log-box">
-    {% for l in today_logs %}<div class="log-row"><span class="l-emp">{{ l.employee }}</span><span>{{ l.label }}</span><span style="margin-left:auto">{{ l.timestamp }}</span></div>{% endfor %}
+AI_CHAT_HTML = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{{{ title }}}}</title><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;800&display=swap" rel="stylesheet"><style>{COMMON_CSS}
+.chat-container {{ max-width: 800px; margin: 20px auto; height: 65vh; display: flex; flex-direction: column; }}
+.messages {{ flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }}
+.msg {{ max-width: 80%; padding: 12px 16px; border-radius: 12px; font-size: 0.95em; line-height: 1.5; }}
+.msg.user {{ align-self: flex-end; background: linear-gradient(135deg, var(--brand-purple), var(--brand-peach)); color: #0f172a; font-weight: 600; border-bottom-right-radius: 2px; }}
+.msg.ai {{ align-self: flex-start; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(189, 178, 255, 0.3); color: var(--text-light); border-bottom-left-radius: 2px; }}
+.input-area {{ display: flex; gap: 10px; margin-top: 15px; }}
+.chat-input {{ flex: 1; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--brand-purple); color: var(--text-light); padding: 12px 16px; border-radius: 8px; font-family: 'Montserrat', sans-serif; outline: none; font-size: 16px; }}
+.chat-input:focus {{ border-color: var(--brand-peach); }}
+.send-btn {{ width: 100px; margin: 0; }}
+</style></head><body>
+<div class="header" style="padding-bottom: 0;">
+  <img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0911/0215/0954/files/Afaq_official_logo.png?v=1770887488" alt="Logo">
+  <div class="clock" style="font-size: 1.5em;">{{{{ title }}}}</div>
+  <div class="net-banner glass-card" style="padding: 5px;"><a href="/" class="net-link" style="font-size: 0.9em;">⬅ Back to Dashboard</a></div>
+</div>
+<div class="chat-container glass-card">
+  <div class="messages" id="chat-box">
+    <div class="msg ai">Hello! I am the {{{{ title }}}}. How can I assist you today?</div>
+  </div>
+  <div class="input-area">
+    <input type="text" id="chat-input" class="chat-input" placeholder="Type your message..." onkeypress="if(event.key === 'Enter') sendMessage()">
+    <button class="btn-primary send-btn" onclick="sendMessage()">Send</button>
   </div>
 </div>
-
-<div class="ai-float"><a href="/ai">AI</a></div>
-
-{% if message %}<div class="toast">{{ message }}</div><script>setTimeout(()=>{document.querySelector('.toast').remove()},4000)</script>{% endif %}
-
 <script>
-setInterval(()=>{location.reload()}, 60000);
-</script>
-</body>
-</html>
-"""
+async function sendMessage() {{
+  const input = document.getElementById('chat-input');
+  const box = document.getElementById('chat-box');
+  const text = input.value.trim();
+  if(!text) return;
+  const uDiv = document.createElement('div'); uDiv.className = 'msg user'; uDiv.textContent = text; box.appendChild(uDiv);
+  input.value = ''; box.scrollTop = box.scrollHeight;
+  try {{
+    const res = await fetch('/api/chat', {{ method: 'POST', headers: {{'Content-Type': 'application/json'}}, body: JSON.stringify({{message: text}}) }});
+    const data = await res.json();
+    const aDiv = document.createElement('div'); aDiv.className = 'msg ai'; aDiv.textContent = data.response; box.appendChild(aDiv);
+    box.scrollTop = box.scrollHeight;
+  }} catch(e) {{
+    const eDiv = document.createElement('div'); eDiv.className = 'msg ai'; eDiv.style.color = '#ef4444'; eDiv.textContent = "Error: AI Backend not connected yet."; box.appendChild(eDiv);
+  }}
+}}
+</script></body></html>"""
 
+# ---------------------------------------------------------
+# ROUTES: EMPLOYEE APP (Port 3456)
+# ---------------------------------------------------------
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    g = _guard(api=False)
-    if g: return g
     message = None
     today = datetime.now().strftime("%Y-%m-%d")
     if request.method == 'POST':
@@ -422,15 +361,60 @@ def index():
 
     emp_data = []
     for e in EMPLOYEES:
-        shifts = []
-        for s in SCHEDULES[e["type"]]:
-            shifts.append({"label": s["label"], "time": s["time"], "active": is_within_window(s["time"])})
-        emp_data.append({"name": e["name"], "shifts": shifts})
+        shifts = [{"label": s["label"], "time": s["time"], "active": is_within_window(s["time"])} for s in get_today_schedule(e["type"])]
+        emp_data.append({"name": e["name"], "shifts": shifts, "kpi": get_monthly_kpi(e["name"])})
 
-    return render_template_string(HTML, employees=emp_data, today_logs=get_today_logs(), now_time=datetime.now().strftime("%H:%M:%S"), local_ip=LOCAL_IP, port=PORT, message=message)
+    return render_template_string(EMPLOYEE_HTML, employees=emp_data, today_logs=get_today_logs(), now_time=datetime.now().strftime("%H:%M:%S"), local_ip=LOCAL_IP, port=PORT, message=message)
 
-@app.route('/api/qr')
-def api_qr(): return jsonify({"status": "not_supported"})
+@app.route('/ai')
+def ai_page():
+    return render_template_string(AI_CHAT_HTML, title="Office AI Assistant")
+
+@app.route('/api/chat', methods=['POST'])
+def api_chat():
+    data = request.json
+    user_message = data.get('message', '')
+    if not ai_model:
+        return jsonify({"response": "Error: GEMINI_API_KEY is missing or invalid in your .env file."})
+    try:
+        prompt = f"You are the Office AI Assistant for Afaq Alnaseem Trading LLC. Be helpful, concise, and professional to the staff. User says: {user_message}"
+        response = ai_model.generate_content(prompt)
+        return jsonify({"response": response.text})
+    except Exception as e:
+        return jsonify({"response": f"API Error: {str(e)}"})
+
+@manager_app.route('/')
+def manager_index():
+    emp_data = []
+    for e in EMPLOYEES:
+        shifts = [{"label": s["label"], "time": s["time"]} for s in get_today_schedule(e["type"])]
+        emp_data.append({"name": e["name"], "shifts": shifts, "kpi": get_monthly_kpi(e["name"])})
+    return render_template_string(MANAGER_HTML, employees=emp_data, today_logs=get_today_logs(), now_time=datetime.now().strftime("%H:%M:%S"))
+
+@manager_app.route('/ai')
+def manager_ai_page():
+    return render_template_string(AI_CHAT_HTML, title="Owner AI Assistant")
+
+@manager_app.route('/api/chat', methods=['POST'])
+def manager_api_chat():
+    data = request.json
+    user_message = data.get('message', '')
+    if not ai_model:
+        return jsonify({"response": "Error: GEMINI_API_KEY is missing or invalid in your .env file."})
+    try:
+        prompt = f"You are the Owner AI Assistant for Afaq Alnaseem Trading LLC. You are talking to a manager/owner. Be analytical and strategic. User says: {user_message}"
+        response = ai_model.generate_content(prompt)
+        return jsonify({"response": response.text})
+    except Exception as e:
+        return jsonify({"response": f"API Error: {str(e)}"})
+
+# ---------------------------------------------------------
+# RUNNER LOGIC
+# ---------------------------------------------------------
+def run_manager_app():
+    print(f" * Running Manager Dashboard on http://127.0.0.1:{MANAGER_PORT}")
+    manager_app.run(host='0.0.0.0', port=MANAGER_PORT, debug=False, use_reloader=False)
 
 if __name__ == '__main__':
+    threading.Thread(target=run_manager_app, daemon=True).start()
     app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)

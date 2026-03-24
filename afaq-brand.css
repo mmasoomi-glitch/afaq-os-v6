@@ -1,0 +1,71 @@
+/* afaq-brand.css */
+:root {
+    --brand-peach: #ffd6a5;
+    --brand-green: #b8d58d;
+    --brand-purple: #bdb2ff;
+    --bg-dark: #0f172a;
+    --text-light: #f8fafc;
+}
+
+body {
+    font-family: 'Montserrat', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+}
+
+/* Typography Classes */
+.heading-primary {
+    font-weight: 800;
+    color: var(--brand-peach);
+    letter-spacing: 2px;
+}
+
+.gradient-text {
+    background: linear-gradient(to right, var(--brand-green), var(--brand-purple), var(--brand-peach));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Component Classes */
+.glass-card {
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(189, 178, 255, 0.3);
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    padding: 1.5rem;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--brand-green), var(--brand-purple));
+    color: #001a0e;
+    font-weight: bold;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: transform 0.2s, filter 0.2s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
+}
+
+.input-field {
+    background: #080d1a;
+    border: 1px solid var(--brand-purple);
+    color: var(--text-light);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    width: 100%;
+}
+
+/* Logo Classes */
+.brand-logo {
+    max-height: 48px;
+    width: auto;
+    object-fit: contain;
+    margin: 0 auto 10px auto;
+    display: block;
+}
