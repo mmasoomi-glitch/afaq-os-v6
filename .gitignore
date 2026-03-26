@@ -1,41 +1,31 @@
-.env
 
-# Python
+.env
+afaq_tactical.db
+afaq_tactical.db-shm
+afaq_tactical.db-wal
+afaq_tactical.log
 __pycache__/
 *.py[cod]
 *.pyd
 .venv/
 venv/
 .env.*
-
-# Node
 node_modules/
-
-# WhatsApp / bridge / caches / sessions
 session/
 .wwebjs_cache/
-whatsapp-bridge/
 whatsapp-web.js-main/
-
-# Logs / temp
 *.log
 *.tmp
 *.temp
 .DS_Store
 Thumbs.db
-
-# IDE
 .vscode/
-
-# Build artifacts
 build/
 dist/
-
-# Archives
 *.zip
-
 afaq_attendance_enhanced.py
 afaq_attendance_full.py
-
 messages.json
 qr_state.json
+cloudflared-windows-amd64.exe
+OpenRouter Chat Tue Mar 24 2026.json

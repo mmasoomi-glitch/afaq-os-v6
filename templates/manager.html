@@ -1,0 +1,239 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Afaq Tactical - Command Center</title>
+    <link rel="stylesheet" href="/static/afaq-brand.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="ticker-wrap">
+        <div class="ticker">
+            <span class="ticker-item">🏢 AFAQ AL NASEEM TRADING LLC</span>
+            <span class="ticker-item">👤 Commander: Abdolmadjid Masoomi</span>
+            <span class="ticker-item">📊 Daily Sales: AED {{ shopify_stats.daily_sales|int }}</span>
+            <span class="ticker-item">📦 Orders: {{ shopify_stats.daily_orders }}</span>
+            <span class="ticker-item">⚠️ Velocity Alerts: {{ shopify_stats.velocity_alerts|length }}</span>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0911/0215/0954/files/Afaq_official_logo.png?v=1770887488">
+        
+        <div class="glass-card" style="margin-bottom: 20px;">
+            <div style="font-size: 0.7em; opacity: 0.6; text-transform: uppercase;">Executive Operations Commander</div>
+            <div style="font-weight: 800; color: var(--brand-peach);">Abdolmadjid Masoomi</div>
+        </div>
+
+        <div class="glass-card" style="margin-bottom: 20px;">
+            <div style="font-weight: 800; margin-bottom: 10px; color: var(--brand-purple);">SYSTEM HEALTH</div>
+            <div class="health-grid">
+                <div class="health-item">
+                    <div class="health-dot"></div>
+                    <span style="font-size:0.8em;">AI Core</span>
+                </div>
+                <div class="health-item">
+                    <div class="health-dot"></div>
+                    <span style="font-size:0.8em;">Shopify</span>
+                </div>
+                <div class="health-item">
+                    <div class="health-dot"></div>
+                    <span style="font-size:0.8em;">Database</span>
+                </div>
+                <div class="health-item">
+                    <div class="health-dot"></div>
+                    <span style="font-size:0.8em;">WhatsApp</span>
+                </div>
+                <div class="health-item">
+                    <div class="health-dot"></div>
+                    <span style="font-size:0.8em;">Crawler</span>
+                </div>
+                <div class="health-item">
+                    <div class="health-dot"></div>
+                    <span style="font-size:0.8em;">Email</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div style="font-weight: 800; margin-bottom: 10px; color: var(--brand-peach);">COMMAND ACTIONS</div>
+            <a href="/admin/directives" class="btn-primary" style="display:block; margin: 5px 0;">📋 All Directives</a>
+            <a href="/admin/reports" class="btn-primary" style="display:block; margin: 5px 0;">📈 Performance Reports</a>
+            <a href="/admin/decisions" class="btn-primary" style="display:block; margin: 5px 0;">⚖️ Critical Decisions</a>
+            <a href="/ai" class="btn-primary" style="display:block; margin: 5px 0;">🤖 Owner AI Analyst</a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <div>
+                <h1 style="font-weight: 900; font-size: 2.5em; color: var(--brand-purple);">TACTICAL COMMAND CENTER</h1>
+                <p style="opacity: 0.7; letter-spacing: 2px;">Operations Control & Intelligence</p>
+            </div>
+            <div class="glass-card">
+                <div class="clock">{{ now_time }}</div>
+            </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 2fr 1fr;">
+            <div class="glass-card">
+                <h3 style="color: var(--brand-peach); margin-bottom: 20px;">🎯 DIRECTIVE DISPATCH</h3>
+                <form id="directive-form" style="display: flex; flex-direction: column; gap: 15px;">
+                    <select id="directive-assignee" class="input-field">
+                        {% for emp in employees %}
+                        <option value="{{ emp.name }}">{{ emp.name }} ({{ emp.role }})</option>
+                        {% endfor %}
+                    </select>
+                    <textarea id="directive-objective" class="input-field" rows="4" 
+                              placeholder="Describe the mission objective..."></textarea>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="intel-recon" checked>
+                        <span style="font-weight: 600;">🔍 Activate Tactical Recon (Market Intelligence)</span>
+                    </label>
+                    <button type="button" onclick="dispatchDirective()" class="btn-primary" id="dispatch-btn">
+                        🚀 DEPLOY DIRECTIVE
+                    </button>
+                </form>
+
+                <div style="margin-top: 30px;">
+                    <h4 style="color: var(--brand-green); margin-bottom: 15px;">ACTIVE OPERATIONS</h4>
+                    {% for directive in active_directives %}
+                    <div class="glass-card directive-card directive-priority-{{ directive.priority }}" style="margin: 10px 0; padding: 15px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            <div>
+                                <span style="font-weight: 800; color: var(--brand-purple);">{{ directive.assignee }}</span>
+                                <span style="opacity: 0.7; margin-left: 10px;">{{ directive.objective[:40] }}...</span>
+                            </div>
+                            <span class="timer" data-deadline="{{ directive.deadline }}">--:--</span>
+                        </div>
+                        {% if directive.proof_path %}
+                        <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; font-size: 0.8em;">
+                            <strong style="color: var(--brand-green);">📎 PROOF UPLOADED:</strong>
+                            <a href="{{ directive.proof_path }}" target="_blank" style="color: var(--brand-peach);">View Proof</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div>
+                <div class="glass-card" style="margin-bottom: 20px;">
+                    <h4 style="color: var(--brand-purple); margin-bottom: 15px;">📊 SALES VELOCITY</h4>
+                    <div style="position: relative; min-height: 300px;">
+                        <canvas id="salesChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="glass-card">
+                    <h4 style="color: var(--brand-peach); margin-bottom: 15px;">⚠️ VELOCITY ALERTS</h4>
+                    {% for alert in shopify_stats.velocity_alerts[:5] %}
+                    <div style="padding: 10px; border-bottom: 1px solid var(--border-color); {% if alert.severity == 'CRITICAL' %}border-left: 3px solid var(--critical);{% endif %}">
+                        <div style="font-weight: 600;">{{ alert.product }}</div>
+                        <div style="font-size: 0.8em; opacity: 0.7;">
+                            Stock: {{ alert.inventory }} | Velocity: {{ alert.velocity }} | 
+                            <span style="color: {% if alert.severity == 'CRITICAL' %}var(--critical){% else %}var(--brand-peach){% endif %};">
+                                {{ alert.days_left }} days left
+                            </span>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div style="opacity: 0.7; text-align: center; padding: 20px;">No critical alerts</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card" style="margin-top: 30px;">
+            <h3 style="color: var(--brand-green); margin-bottom: 20px;">🖥️ LIVE RECON TERMINAL</h3>
+            <div class="recon-terminal" id="recon-terminal">
+                {% for log in crawler_logs %}
+                <div class="recon-line">
+                    > Scanning {{ log.marketplace }} for: {{ log.keyword }}... 
+                    {% if log.data_found %}<span style="color: var(--brand-green);">✓ Data Found</span>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sales Chart with proper sizing
+        const ctx = document.getElementById('salesChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                    label: 'Online Sales (AED)',
+                    data: [12000, 19000, 15000, 22000, 18000, 25000, {{ shopify_stats.online_sales|int }}],
+                    borderColor: '#ffd6a5',
+                    backgroundColor: 'rgba(255, 214, 165, 0.15)',
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'POS Sales (AED)',
+                    data: [5000, 7000, 6000, 8000, 7500, 9000, {{ shopify_stats.pos_sales|int }}],
+                    borderColor: '#b8d58d',
+                    tension: 0.4,
+                    borderDash: [5, 5]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#f8fafc' } }
+                },
+                scales: {
+                    x: { ticks: { color: '#f8fafc' } },
+                    y: { ticks: { color: '#f8fafc' } }
+                }
+            }
+        });
+
+        // Directive Timers
+        setInterval(() => {
+            document.querySelectorAll('.timer').forEach(el => {
+                const deadline = new Date(el.dataset.deadline).getTime();
+                const now = new Date().getTime();
+                const diff = deadline - now;
+                
+                if (diff <= 0) {
+                    el.innerText = 'OVERDUE';
+                    el.style.color = 'var(--critical)';
+                } else {
+                    const h = Math.floor(diff / (1000 * 60 * 60));
+                    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    const s = Math.floor((diff % (1000 * 60)) / 1000);
+                    el.innerText = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+                }
+            });
+        }, 1000);
+
+        function dispatchDirective() {
+            const btn = document.getElementById('dispatch-btn');
+            btn.disabled = true;
+            btn.innerText = '⚡ PROCESSING RECON...';
+            
+            fetch('/api/directives/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    assignee: document.getElementById('directive-assignee').value,
+                    objective: document.getElementById('directive-objective').value,
+                    intel_recon: document.getElementById('intel-recon').checked
+                })
+            }).then(() => location.reload());
+        }
+
+        // Auto-scroll recon terminal
+        const reconTerminal = document.getElementById('recon-terminal');
+        if (reconTerminal) {
+            reconTerminal.scrollTop = reconTerminal.scrollHeight;
+        }
+    </script>
+</body>
+</html>

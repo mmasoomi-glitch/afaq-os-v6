@@ -1,0 +1,212 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Afaq Tactical - Employee Terminal</title>
+    <link rel="stylesheet" href="/static/afaq-brand.css">
+</head>
+<body>
+    <div class="ticker-wrap">
+        <div class="ticker">
+            <span class="ticker-item">🌤️ Dubai: 38°C, Clear</span>
+            <span class="ticker-item">💱 USD/AED: 3.67</span>
+            <span class="ticker-item">📊 Store Status: ACTIVE</span>
+            <span class="ticker-item">⏰ Dubai Time: {{ now_time }}</span>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0911/0215/0954/files/Afaq_official_logo.png?v=1770887488">
+        
+        <div class="glass-card stat-card" style="margin-bottom: 20px;">
+            <div class="stat-label">Your Monthly KPI</div>
+            <div class="stat-value" style="color: {{ kpi_color }}">{{ kpi_text }}</div>
+        </div>
+
+        <div class="glass-card" style="margin-bottom: 20px;">
+            <div style="font-weight: 800; margin-bottom: 10px; color: var(--brand-purple);">QUICK ACTIONS</div>
+            <a href="/ai" class="btn-primary" style="display:block; margin: 5px 0;">🤖 Veridian Junior AI</a>
+            <a href="/directives" class="btn-primary" style="display:block; margin: 5px 0;">📋 My Directives</a>
+        </div>
+
+        <div class="glass-card">
+            <div style="font-weight: 800; margin-bottom: 10px; color: var(--brand-peach);">ACCOUNTABILITY</div>
+            <div id="break-status" style="font-size: 0.9em; margin-bottom: 10px;">
+                {% if active_break %}
+                    <div style="color: var(--critical); font-weight: 800;">⚠️ ON BREAK</div>
+                    <div class="timer {% if break_violation %}critical{% elif break_warning %}warning{% endif %}" 
+                         id="break-timer" data-start="{{ break_start }}">
+                        {{ break_elapsed }}:00
+                    </div>
+                {% else %}
+                    <div style="color: var(--brand-green);">✓ ON STATION</div>
+                {% endif %}
+            </div>
+            <button id="break-btn" onclick="toggleBreak()" 
+                    class="btn-primary {% if active_break %}btn-success{% else %}btn-danger{% endif %}" 
+                    style="width: 100%;">
+                {% if active_break %}RETURN TO STATION{% else %}LEAVE STATION{% endif %}
+            </button>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <div>
+                <h1 style="font-weight: 900; font-size: 2.5em; color: var(--brand-purple);">EMPLOYEE TERMINAL</h1>
+                <p style="opacity: 0.7; letter-spacing: 2px;">{{ current_employee }} - {{ employee_role }}</p>
+            </div>
+            <div class="glass-card">
+                <div class="clock">{{ now_time }}</div>
+            </div>
+        </div>
+
+        {% if message %}
+        <div class="glass-card" style="border-left: 4px solid {{ '#10b981' if message_type == 'success' else '#ef4444' }}; margin-bottom: 20px;">
+            {{ message }}
+        </div>
+        {% endif %}
+
+        <div class="grid">
+            <div class="glass-card">
+                <h3 style="color: var(--brand-peach); margin-bottom: 15px;">📋 ACTIVE DIRECTIVES</h3>
+                {% for directive in active_directives %}
+                <div class="glass-card directive-card directive-priority-{{ directive.priority }}" style="margin: 10px 0; padding: 15px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span style="font-weight: 800; color: var(--brand-purple);">{{ directive.objective[:50] }}...</span>
+                        <span class="timer" id="timer-{{ directive.directive_id }}" data-deadline="{{ directive.deadline }}">--:--</span>
+                    </div>
+                    <div style="font-size: 0.85em; opacity: 0.8; margin-bottom: 10px;">
+                        <strong>PRIORITY:</strong> {{ directive.priority }} | 
+                        <strong>WINDOW:</strong> {{ directive.mission_window_minutes }}min
+                    </div>
+                    {% if directive.situation %}
+                    <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; font-size: 0.8em; margin-bottom: 10px;">
+                        <strong style="color: var(--brand-green);">📖 SITUATION:</strong><br>
+                        {{ directive.situation }}
+                    </div>
+                    {% endif %}
+                    <div style="margin-bottom: 10px;">
+                        <strong style="color: var(--brand-peach);">EXECUTION STEPS:</strong>
+                        <ol style="padding-left: 20px; margin-top: 5px; font-size: 0.9em;">
+                            {% for step in directive.execution_steps %}
+                            <li>{{ step }}</li>
+                            {% endfor %}
+                        </ol>
+                    </div>
+                    <button onclick="showProofModal('{{ directive.directive_id }}')" class="btn-primary btn-success" style="width: auto; padding: 8px 20px;">
+                        ✓ COMPLETE & UPLOAD PROOF
+                    </button>
+                </div>
+                {% else %}
+                <div style="opacity: 0.7; text-align: center; padding: 40px;">
+                    No active directives. Stand by for new missions.
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="glass-card">
+                <h3 style="color: var(--brand-green); margin-bottom: 15px;">⏰ ATTENDANCE</h3>
+                {% for shift in shifts %}
+                <form method="POST" style="margin: 10px 0;">
+                    <input type="hidden" name="employee" value="{{ current_employee }}">
+                    <input type="hidden" name="label" value="{{ shift.label }}">
+                    <input type="hidden" name="time" value="{{ shift.time }}">
+                    <button type="submit" class="btn-primary" style="width: 100%;" 
+                            {% if not shift.active %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+                        {% if shift.active %}▶{% else %}🔒{% endif %} {{ shift.label }} ({{ shift.time }})
+                    </button>
+                </form>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Proof Upload Modal -->
+    <div id="proof-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000;">
+        <div class="glass-card" style="max-width:500px; margin:100px auto; padding:30px;">
+            <h3 style="color:var(--brand-purple); margin-bottom:20px;">Upload Proof of Completion</h3>
+            <form id="proof-form" enctype="multipart/form-data">
+                <input type="hidden" id="proof-directive-id">
+                <input type="file" name="proof_file" accept="image/*,.pdf" required class="input-field" style="margin-bottom:15px;">
+                <div style="display:flex; gap:10px;">
+                    <button type="submit" class="btn-primary btn-success" style="flex:1;">Upload & Complete</button>
+                    <button type="button" onclick="closeProofModal()" class="btn-primary" style="flex:1; background:var(--critical);">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Break Timer
+        setInterval(() => {
+            const timerEl = document.getElementById('break-timer');
+            if (timerEl) {
+                const start = new Date(timerEl.dataset.start).getTime();
+                const now = new Date().getTime();
+                const elapsed = Math.floor((now - start) / 60000);
+                const seconds = Math.floor(((now - start) % 60000) / 1000);
+                timerEl.innerText = `${elapsed}:${seconds.toString().padStart(2, '0')}`;
+                
+                if (elapsed > 15) {
+                    timerEl.classList.add('critical');
+                    timerEl.classList.remove('warning');
+                } else if (elapsed > 10) {
+                    timerEl.classList.add('warning');
+                }
+            }
+        }, 1000);
+
+        // Directive Timers
+        setInterval(() => {
+            document.querySelectorAll('[id^="timer-"]').forEach(el => {
+                const deadline = new Date(el.dataset.deadline).getTime();
+                const now = new Date().getTime();
+                const diff = deadline - now;
+                
+                if (diff <= 0) {
+                    el.innerText = 'FAILED';
+                    el.style.color = 'var(--critical)';
+                } else {
+                    const h = Math.floor(diff / (1000 * 60 * 60));
+                    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    const s = Math.floor((diff % (1000 * 60)) / 1000);
+                    el.innerText = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+                    
+                    if (diff < 15 * 60 * 1000) {
+                        el.classList.add('warning');
+                    }
+                }
+            });
+        }, 1000);
+
+        function toggleBreak() {
+            fetch('/api/breaks/toggle', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => location.reload());
+        }
+
+        function showProofModal(directiveId) {
+            document.getElementById('proof-directive-id').value = directiveId;
+            document.getElementById('proof-modal').style.display = 'block';
+        }
+
+        function closeProofModal() {
+            document.getElementById('proof-modal').style.display = 'none';
+        }
+
+        document.getElementById('proof-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            formData.append('directive_id', document.getElementById('proof-directive-id').value);
+            
+            fetch('/api/directives/complete', {
+                method: 'POST',
+                body: formData
+            }).then(() => location.reload());
+        });
+    </script>
+</body>
+</html>
