@@ -11,6 +11,8 @@ from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
+import random
+
 class TacticalRecon:
     """
     Market intelligence gathering through web crawling and search.
@@ -19,8 +21,13 @@ class TacticalRecon:
     
     def __init__(self, db_manager):
         self.session = requests.Session()
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15',
+        ]
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
         })
@@ -43,7 +50,9 @@ class TacticalRecon:
         }
         
         try:
-            response = self.session.get(url, timeout=15, allow_redirects=True)
+            headers = self.session.headers.copy()
+            headers.update({'User-Agent': random.choice(self.user_agents)})
+            response = self.session.get(url, headers=headers, timeout=15, allow_redirects=True)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -68,8 +77,11 @@ class TacticalRecon:
             result['success'] = True
             logger.info(f"Successfully crawled: {url}")
             
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Crawl request error for {url}: {str(e)}")
+            result['error'] = str(e)
         except Exception as e:
-            logger.error(f"Crawl error for {url}: {str(e)}")
+            logger.error(f"Unexpected crawl error for {url}: {str(e)}")
             result['error'] = str(e)
         
         return result
