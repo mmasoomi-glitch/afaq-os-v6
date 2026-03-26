@@ -46,11 +46,22 @@ def employee_index():
     active_directives = db_manager.get_directives(status='Pending', assignee=current_employee)
     active_break = accountability_engine.get_active_break(current_employee)
     
+    now = time_service.now()
+    
+    def is_active(shift_time_str):
+        shift_time = datetime.strptime(shift_time_str, '%H:%M').time()
+        shift_dt = now.replace(hour=shift_time.hour, minute=shift_time.minute, second=0, microsecond=0)
+        
+        start_window = shift_dt - timedelta(minutes=15)
+        end_window = shift_dt + timedelta(minutes=15)
+        
+        return start_window <= now <= end_window
+
     shifts = [
-        {'label': 'Morning In', 'time': '09:00', 'active': True},
-        {'label': 'Morning Out', 'time': '14:00', 'active': False},
-        {'label': 'Evening In', 'time': '16:30', 'active': False},
-        {'label': 'Evening Out', 'time': '21:30', 'active': False}
+        {'label': 'Morning In', 'time': '09:00', 'active': is_active('09:00')},
+        {'label': 'Morning Out', 'time': '14:00', 'active': is_active('14:00')},
+        {'label': 'Evening In', 'time': '16:30', 'active': is_active('16:30')},
+        {'label': 'Evening Out', 'time': '21:30', 'active': is_active('21:30')}
     ]
     
     kpi_text = "95.2%"
