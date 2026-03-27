@@ -1,5 +1,11 @@
 
 import os
+with open('.env', 'r') as f:
+    for line in f:
+        if line.strip() and not line.strip().startswith('#'):
+            key, value = line.strip().split('=', 1)
+            os.environ[key] = value
+
 import threading
 import webbrowser
 import logging
@@ -14,20 +20,7 @@ from services.shopify_mcp import EcomCommander
 # =============================================================================
 # CONFIGURATION & ENVIRONMENT LOADING
 # =============================================================================
-def load_env_file(env_path: str):
-    if os.path.exists(env_path):
-        with open(env_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    key = key.strip()
-                    value = value.strip().strip('"\'')
-                    if key not in os.environ:
-                        os.environ[key] = value
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-load_env_file(os.path.join(BASE_DIR, '.env'))
 
 # =============================================================================
 # LOGGING CONFIGURATION
