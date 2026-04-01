@@ -83,12 +83,45 @@ def save_entry(entry):
     logs.append(entry)
     with open(DATA_FILE, 'w') as f: json.dump(logs, f, indent=4)
 
+def load_attendance_logs():
+    if not os.path.exists(DATA_FILE):
+        return []
+    with open(DATA_FILE, 'r', encoding='utf-8') as f:
+        raw = f.read()
+    try:
+        logs = json.loads(raw)
+        return logs
+    except Exception:
+        start = raw.find('[')
+        if start == -1:
+            return []
+        # Prefer the first complete JSON array block
+        first_end = raw.find(']', start)
+        while first_end != -1:
+            candidate = raw[start:first_end+1]
+            try:
+                logs = json.loads(candidate)
+                # Save cleaned data for stability
+                with open(DATA_FILE, 'w', encoding='utf-8') as fw:
+                    json.dump(logs, fw, indent=4)
+                return logs
+            except Exception:
+                first_end = raw.find(']', first_end + 1)
+        # Fallback: parse remainder to last array
+        end = raw.rfind(']')
+        if end != -1 and end > start:
+            try:
+                logs = json.loads(raw[start:end+1])
+                with open(DATA_FILE, 'w', encoding='utf-8') as fw:
+                    json.dump(logs, fw, indent=4)
+                return logs
+            except Exception:
+                return []
+        return []
+
 def get_today_logs():
     today = datetime.now().strftime("%Y-%m-%d")
-    if not os.path.exists(DATA_FILE): return []
-    with open(DATA_FILE, 'r') as f:
-        try: logs = json.load(f)
-        except: return []
+    logs = load_attendance_logs()
     return [l for l in logs if l.get("date") == today]
 
 REQUIRED_LABELS = ["Morning In", "Morning Out", "Evening In", "Evening Out"]
@@ -96,10 +129,7 @@ REQUIRED_LABELS = ["Morning In", "Morning Out", "Evening In", "Evening Out"]
 def get_monthly_kpi(emp_name):
     now = datetime.now()
     current_month_prefix = now.strftime("%Y-%m")
-    if not os.path.exists(DATA_FILE): return {"pct": 0, "color": "#ef4444", "text": "0%"}
-    with open(DATA_FILE, 'r') as f:
-        try: logs = json.load(f)
-        except: logs = []
+    logs = load_attendance_logs()
     emp_logs = [l for l in logs if l.get("employee") == emp_name and l.get("date", "").startswith(current_month_prefix)]
     active_dates = sorted(list(set(l.get("date") for l in emp_logs)))
     if not active_dates: return {"pct": 0.0, "color": "#ef4444", "text": "0.0%"}
@@ -125,10 +155,7 @@ def get_monthly_kpi(emp_name):
     return {"pct": round(pct, 1), "color": color, "text": f"{round(pct, 1)}%"}
 
 def get_punctuality_kpi(emp_name):
-    if not os.path.exists(DATA_FILE): return {"score": 0, "color": "#ef4444", "text": "0%", "evidence": []}
-    with open(DATA_FILE, 'r') as f:
-        try: logs = json.load(f)
-        except: logs = []
+    logs = load_attendance_logs()
     emp_logs = [l for l in logs if l.get("employee") == emp_name]
     if not emp_logs: return {"score": 0, "color": "#ef4444", "text": "0%", "evidence": []}
     
@@ -481,6 +508,15 @@ def manager_index():
 @manager_app.route('/ai')
 def manager_ai_page():
     return render_template_string(AI_CHAT_HTML, title="Owner AI Assistant")
+
+@manager_app.route('/kpi')
+def manager_kpi_page():
+    emp_data = []
+    for e in EMPLOYEES:
+        punctuality = get_punctuality_kpi(e["name"])
+        attendance = get_monthly_kpi(e["name"])
+        emp_data.append({"name": e["name"], "punctuality": punctuality, "attendance": attendance})
+    return render_template_string(KPI_HTML, employees=emp_data)
 
 @manager_app.route('/api/chat', methods=['POST'])
 def manager_api_chat():
