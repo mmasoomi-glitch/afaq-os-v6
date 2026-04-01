@@ -124,6 +124,51 @@ def get_monthly_kpi(emp_name):
     else: color = "#ef4444" 
     return {"pct": round(pct, 1), "color": color, "text": f"{round(pct, 1)}%"}
 
+def get_punctuality_kpi(emp_name):
+    if not os.path.exists(DATA_FILE): return {"score": 0, "color": "#ef4444", "text": "0%", "evidence": []}
+    with open(DATA_FILE, 'r') as f:
+        try: logs = json.load(f)
+        except: logs = []
+    emp_logs = [l for l in logs if l.get("employee") == emp_name]
+    if not emp_logs: return {"score": 0, "color": "#ef4444", "text": "0%", "evidence": []}
+    
+    total_score = 0
+    count = 0
+    evidence = []
+    
+    for log in emp_logs:
+        scheduled = log.get("scheduled")
+        timestamp = log.get("timestamp")
+        date = log.get("date")
+        label = log.get("label")
+        if not scheduled or not timestamp: continue
+        
+        try:
+            sched_h, sched_m = map(int, scheduled.split(":"))
+            actual_h, actual_m, actual_s = map(int, timestamp.split(":"))
+            sched_time = sched_h * 60 + sched_m
+            actual_time = actual_h * 60 + actual_m
+            diff_minutes = actual_time - sched_time
+            if diff_minutes <= 0:
+                score = 100  # On time or early
+            elif diff_minutes <= 15:
+                score = max(50, 100 - diff_minutes * 3)  # Late but within grace
+            else:
+                score = max(0, 50 - (diff_minutes - 15))  # Very late
+            total_score += score
+            count += 1
+            if diff_minutes > 0:
+                evidence.append(f"{date} {label}: Late by {diff_minutes} min")
+        except:
+            continue
+    
+    if count == 0: return {"score": 0, "color": "#ef4444", "text": "0%", "evidence": []}
+    avg_score = total_score / count
+    if avg_score >= 90: color = "var(--brand-green)"
+    elif avg_score >= 70: color = "var(--brand-peach)"
+    else: color = "#ef4444"
+    return {"score": round(avg_score, 1), "color": color, "text": f"{round(avg_score, 1)}%", "evidence": evidence[-10:]}  # Last 10 bad records
+
 def is_within_window(t, before_mins=15, after_mins=15):
     now = datetime.now()
     h, m = map(int, t.split(":"))
@@ -168,6 +213,7 @@ body { font-family: 'Montserrat', sans-serif; background-color: var(--bg-dark); 
 EMPLOYEE_HTML = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Afaq Attendance - Staff</title><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;800&display=swap" rel="stylesheet"><style>{COMMON_CSS}</style></head><body>
 <div style="text-align:center; padding-top: 10px; background: rgba(30,41,59,0.55);">
   <a href="/ai" class="btn-primary" style="display:inline-block; width:auto; padding:6px 20px; border-radius:20px; font-size:0.85em;">🤖 Office AI Assistant</a>
+  <a href="/kpi" class="btn-primary" style="display:inline-block; width:auto; padding:6px 20px; border-radius:20px; font-size:0.85em;">📊 KPI Dashboard</a>
 </div>
 <div class="importance"><div class="importance-text">⚠️ <strong>MANDATORY — ALL STAFF MUST CLOCK IN AND OUT</strong></div></div>
 <div class="header">
@@ -239,6 +285,7 @@ body { font-family: 'Montserrat', sans-serif; background-color: var(--bg-dark); 
 
 <div style="text-align:center; padding-top: 15px;">
   <a href="/ai" class="btn-primary" style="display:inline-block; width:auto; padding:10px 30px; border-radius:20px;">👑 Owner AI & Business Analyst</a>
+  <a href="/kpi" class="btn-primary" style="display:inline-block; width:auto; padding:10px 30px; border-radius:20px;">📊 KPI Dashboard</a>
 </div>
 <div class="header" style="padding-bottom: 10px;">
   <img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0911/0215/0954/files/Afaq_official_logo.png?v=1770887488" alt="Logo">
@@ -344,6 +391,37 @@ async function sendMessage() {{
 }}
 </script></body></html>"""
 
+KPI_HTML = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Attendance KPI Dashboard</title><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;800&display=swap" rel="stylesheet"><style>{COMMON_CSS}
+.kpi-container {{ max-width: 1000px; margin: 20px auto; }}
+.kpi-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }}
+.kpi-card {{ padding: 20px; border-radius: 10px; }}
+.kpi-score {{ font-size: 2em; font-weight: 800; margin-bottom: 10px; }}
+.evidence {{ margin-top: 15px; }}
+.evidence-item {{ font-size: 0.85em; color: rgba(248,250,252,0.7); margin: 5px 0; }}
+</style></head><body>
+<div class="kpi-container">
+  <h1 style="text-align: center; margin-bottom: 30px;">Attendance KPI Dashboard</h1>
+  <div class="kpi-grid">
+    {{% for emp in employees %}}
+    <div class="glass-card kpi-card">
+      <h3>{{{{ emp.name }}}}</h3>
+      <div class="kpi-score" style="color: {{{{ emp.punctuality.color }}}};">{{{{ emp.punctuality.text }}}}</div>
+      <div>Punctuality Score</div>
+      <div style="margin-top: 10px;">Attendance: {{{{ emp.attendance.text }}}}</div>
+      {{% if emp.punctuality.evidence %}}
+      <div class="evidence">
+        <strong>Lateness Records:</strong>
+        {{% for ev in emp.punctuality.evidence %}}
+        <div class="evidence-item">• {{{{ ev }}}}</div>
+        {{% endfor %}}
+      </div>
+      {{% endif %}}
+    </div>
+    {{% endfor %}}
+  </div>
+</div>
+</body></html>"""
+
 # ---------------------------------------------------------
 # ROUTES: EMPLOYEE APP (Port 3456)
 # ---------------------------------------------------------
@@ -369,6 +447,15 @@ def index():
 @app.route('/ai')
 def ai_page():
     return render_template_string(AI_CHAT_HTML, title="Office AI Assistant")
+
+@app.route('/kpi')
+def kpi_page():
+    emp_data = []
+    for e in EMPLOYEES:
+        punctuality = get_punctuality_kpi(e["name"])
+        attendance = get_monthly_kpi(e["name"])
+        emp_data.append({"name": e["name"], "punctuality": punctuality, "attendance": attendance})
+    return render_template_string(KPI_HTML, employees=emp_data)
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
