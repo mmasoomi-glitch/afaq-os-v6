@@ -1,5 +1,7 @@
 import json, os, sys, threading, webbrowser, socket, platform, subprocess, requests
 import google.generativeai as genai
+from services.shopify_ai_agent import ShopifyAIAgent
+from services.shopify_profit import ProfitEngine
 from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, Response, jsonify, redirect, session
 
@@ -520,10 +522,33 @@ def manager_kpi_page():
 
 @manager_app.route('/api/chat', methods=['POST'])
 def manager_api_chat():
-    data = request.json
+    data = request.json or {}
     user_message = data.get('message', '')
+
+    # Try Shopify AI Agent (DeepSeek + real store data) first
+    shopify_fallback = False
+    try:
+        shopify_agent = ShopifyAIAgent()
+        print(f"[SHOP] ready={shopify_agent.ready()}  deepseek={'yes' if shopify_agent.deepseek_key else 'NO'}  url={'yes' if shopify_agent.store_url else 'NO'}  token={'yes' if shopify_agent.token else 'NO'}")
+        if shopify_agent.ready():
+            answer = shopify_agent.chat(user_message)
+            if isinstance(answer, str) and any(flag in answer.lower() for flag in ["error", "no_data", "missing", "deepseek error"]):
+                print(f"[SHOP] fallback trigger: {answer}")
+                shopify_fallback = True
+            else:
+                return jsonify({"response": answer})
+        else:
+            shopify_fallback = True
+    except Exception as e:
+        print(f"[SHOP] exception: {e}")
+        shopify_fallback = True
+
+    if shopify_fallback:
+        print("[MANAGER] Shopify agent failed, falling back to Gemini")
+
+    # Fallback to Gemini
     if not ai_model:
-        return jsonify({"response": "Error: GEMINI_API_KEY is missing or invalid in your .env file."})
+        return jsonify({"response": "Error: No AI backend configured. Add DEEPSEEK_API_KEY or GEMINI_API_KEY to .env."})
     try:
         prompt = f"You are the Owner AI Assistant for Afaq Alnaseem Trading LLC. You are talking to a manager/owner. Be analytical and strategic. User says: {user_message}"
         response = ai_model.generate_content(prompt)
@@ -537,6 +562,87 @@ def manager_api_chat():
 def run_manager_app():
     print(f" * Running Manager Dashboard on http://127.0.0.1:{MANAGER_PORT}")
     manager_app.run(host='0.0.0.0', port=MANAGER_PORT, debug=False, use_reloader=False)
+
+@manager_app.route('/profit')
+def profit_page():
+    tpl = os.path.join(BASE_DIR, 'templates', 'profit_report.html')
+    if os.path.exists(tpl):
+        with open(tpl, 'r', encoding='utf-8') as f:
+            return f.read()
+    return "<h1>Template not found</h1>"
+
+@manager_app.route('/api/profit-report', methods=['POST'])
+def api_profit_report():
+    data = request.json or {}
+    from_date = data.get('from_date', '')
+    to_date = data.get('to_date', '')
+    channel = data.get('channel', 'all')
+    if not from_date or not to_date:
+        return jsonify({"status": "error", "message": "Missing date range"})
+    try:
+        engine = ProfitEngine()
+        if not engine.ready():
+            return jsonify({"status": "not_configured"})
+        result = engine.build_report(from_date, to_date, channel)
+        if result.get("status") != "success":
+            return jsonify(result)
+
+        rows = result.get("rows", [])
+        online_rows = [r for r in rows if r["channel_group"] == "Online"]
+        pos_rows = [r for r in rows if r["channel_group"] != "Online"]
+
+        def agg(items):
+            cost = [r for r in items if r.get("cost_price") is not None]
+            return {
+                "total_orders": len(set(r["order_number"] for r in items)),
+                "line_items": len(items),
+                "gross_sales": round(sum(r["discount_amount"] + r["sold_price_aed"] for r in items), 2),
+                "discounts": round(sum(r["discount_amount"] for r in items), 2),
+                "net_sales": round(sum(r["sold_price_aed"] for r in items), 2),
+                "shipping_charged": round(sum(r["shipping_charged"] for r in items), 2),
+                "shipping_upsell": round(sum(r["shipping_upsell"] for r in items), 2),
+                "product_upsell": round(sum(r["product_upsell"] for r in items), 2),
+                "upsell": round(sum(r["product_upsell"] for r in items), 2),
+                "returns": round(sum(r["returns"] for r in items), 2),
+                "final_sales": round(sum(r["sold_price_aed"] + r["product_upsell"] + r["shipping_upsell"] for r in items), 2),
+                "cogs_total": round(sum(r["cost_price"] for r in cost), 2) if cost else 0,
+                "gross_profit": round(sum(r["profit"] for r in items if r.get("profit") is not None), 2) if any(r.get("profit") is not None for r in items) else 0,
+                "cogs_available": bool(cost),
+            }
+
+        combined = agg(rows)
+        combined["total_line_items"] = len(rows)
+
+        mapped_orders = []
+        for r in rows:
+            mapped_orders.append({
+                "order_number": r["order_number"],
+                "order_date": r["order_date"],
+                "channel_group": r["channel_group"],
+                "channel_source": r["channel_source"],
+                "customer_name": r["customer_name"],
+                "shipping_city": r["shipping_city"],
+                "gross_sales": r["discount_amount"] + r["sold_price_aed"],
+                "discounts": r["discount_amount"],
+                "net_sales": r["sold_price_aed"],
+                "upsell": r["product_upsell"],
+                "shipping_charge": r["shipping_charged"],
+                "shipping_upsell": r["shipping_upsell"],
+                "final_sales": round(r["sold_price_aed"] + r["product_upsell"] + r["shipping_upsell"], 2),
+                "cogs": r["cost_price"],
+                "gross_profit": r["profit"],
+            })
+
+        return jsonify({
+            "status": "success",
+            "period": {"from": from_date, "to": to_date},
+            "summary": combined,
+            "online": agg(online_rows),
+            "pos": agg(pos_rows),
+            "orders": mapped_orders,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
 
 if __name__ == '__main__':
     threading.Thread(target=run_manager_app, daemon=True).start()
