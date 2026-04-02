@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Afaq — Profit Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root{--brand-peach:#ffd6a5;--brand-green:#b8d58d;--brand-purple:#bdb2ff;--bg-dark:#0f172a;--text-light:#f8fafc}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Montserrat',sans-serif;background:var(--bg-dark);color:var(--text-light);min-height:100vh;padding:0 0 40px}
+.glass{background:rgba(30,41,59,.7);backdrop-filter:blur(10px);border:1px solid rgba(189,178,255,.3);border-radius:1rem;box-shadow:0 10px 25px -5px rgba(0,0,0,.5);padding:1.5rem}
+.btn{background:linear-gradient(135deg,var(--brand-green),var(--brand-purple));color:#001a0e;font-weight:700;border:none;border-radius:.5rem;padding:.65rem 1.2rem;cursor:pointer;font-family:'Montserrat',sans-serif;font-size:.9rem;transition:transform .2s,filter .2s;display:inline-block;text-align:center}
+.btn:hover{transform:translateY(-2px);filter:brightness(1.1)}
+.btn-sm{padding:.45rem .9rem;font-size:.82rem}
+.btn-outline{background:transparent;border:1px solid var(--brand-purple);color:var(--brand-purple)}
+.btn-outline:hover{background:var(--brand-purple);color:#0f172a}
+.brand-logo{max-height:44px;display:block;margin:0 auto 8px}
+.header{text-align:center;padding:20px 16px 10px}
+.page-title{font-weight:800;font-size:1.6em;color:var(--brand-peach);margin-bottom:4px}
+.page-sub{font-size:.85em;opacity:.7;margin-bottom:0}
+.back-link{color:var(--brand-purple);text-decoration:none;font-weight:600;font-size:.9em}
+.back-link:hover{text-decoration:underline}
+
+/* filters */
+.filters{max-width:1100px;margin:0 auto 24px;padding:0 16px}
+.filters-inner{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.filter-group{display:flex;flex-direction:column;gap:4px}
+.filter-group label{font-size:.75em;font-weight:600;text-transform:uppercase;letter-spacing:1px;opacity:.7}
+.filter-group input,.filter-group select{background:rgba(15,23,42,.6);border:1px solid rgba(189,178,255,.3);color:var(--text-light);padding:.5rem .75rem;border-radius:.5rem;font-family:'Montserrat',sans-serif;font-size:.85rem;outline:none}
+.filter-group input:focus,.filter-group select:focus{border-color:var(--brand-peach)}
+.filter-group select option{background:#1e293b}
+
+/* cards grid */
+.cards{max-width:1100px;margin:0 auto 24px;padding:0 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.card{text-align:center;padding:1.2rem 1rem}
+.card-label{font-size:.72em;font-weight:600;text-transform:uppercase;letter-spacing:1px;opacity:.6;margin-bottom:6px}
+.card-value{font-size:1.7em;font-weight:800;line-height:1.2}
+.card-value.peach{color:var(--brand-peach)}
+.card-value.green{color:var(--brand-green)}
+.card-value.purple{color:var(--brand-purple)}
+.card-value.red{color:#ef4444}
+.card-sub{font-size:.72em;opacity:.5;margin-top:4px}
+
+/* breakdown */
+.breakdown{max-width:1100px;margin:0 auto 24px;padding:0 16px}
+.breakdown-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:700px){.breakdown-grid{grid-template-columns:1fr}}
+.bd-title{font-weight:700;font-size:.95em;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.bd-title .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dot-online{background:var(--brand-green)}
+.dot-pos{background:var(--brand-peach)}
+.dot-all{background:var(--brand-purple)}
+.bd-row{display:flex;justify-content:space-between;padding:5px 0;font-size:.85em;border-bottom:1px solid rgba(189,178,255,.1)}
+.bd-row:last-child{border-bottom:none}
+.bd-row span:last-child{font-weight:700}
+
+/* chart */
+.chart-section{max-width:1100px;margin:0 auto 24px;padding:0 16px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.chart-section{grid-template-columns:1fr}}
+.chart-box{position:relative;height:260px;width:100%}
+
+/* table */
+.table-section{max-width:1100px;margin:0 auto 24px;padding:0 16px}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.8em}
+th{background:rgba(15,23,42,.6);text-align:left;padding:10px 12px;font-weight:700;font-size:.75em;text-transform:uppercase;letter-spacing:1px;opacity:.8;border-bottom:2px solid rgba(189,178,255,.25);position:sticky;top:0}
+td{padding:8px 12px;border-bottom:1px solid rgba(189,178,255,.1);white-space:nowrap}
+tr:hover td{background:rgba(189,178,255,.05)}
+.ch-online{color:var(--brand-green);font-weight:600}
+.ch-pos{color:var(--brand-peach);font-weight:600}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.empty{text-align:center;padding:40px;opacity:.5;font-size:.9em}
+
+/* states */
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(189,178,255,.3);border-top-color:var(--brand-purple);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-bar{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:.5rem;padding:10px 16px;font-size:.85em;color:#fca5a5;text-align:center;margin:0 auto 20px;max-width:1100px}
+
+/* scrollable table body */
+.table-scroll{max-height:500px;overflow-y:auto}
+.table-scroll::-webkit-scrollbar{width:6px}
+.table-scroll::-webkit-scrollbar-track{background:rgba(15,23,42,.3)}
+.table-scroll::-webkit-scrollbar-thumb{background:rgba(189,178,255,.3);border-radius:3px}
+
+/* mobile responsive */
+@media(max-width:768px){
+  .filters-inner{flex-direction:column}
+  .filter-group{width:100%}
+  .filter-group input,.filter-group select{width:100%}
+  .btn{width:100%}
+  .btn-sm{width:100%}
+  .cards{grid-template-columns:1fr 1fr}
+  .breakdown-grid{grid-template-columns:1fr}
+  .chart-section{grid-template-columns:1fr}
+  .page-title{font-size:1.2em}
+  .glass{padding:1rem}
+  table{font-size:.7em}
+  th{padding:6px 8px;font-size:.65em}
+  td{padding:5px 8px}
+}
+@media(max-width:480px){
+  .cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <a href="/" class="back-link">&larr; Back to Dashboard</a>
+  <img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0911/0215/0954/files/Afaq_official_logo.png?v=1770887488" alt="Logo">
+  <div class="page-title">Profit Report</div>
+  <div class="page-sub">Online vs POS-grouped · Asia/Dubai timezone</div>
+</div>
+
+<!-- FILTERS -->
+<div class="filters">
+  <div class="filters-inner glass">
+    <div class="filter-group">
+      <label>From Date</label>
+      <input type="date" id="fromDate">
+    </div>
+    <div class="filter-group">
+      <label>To Date</label>
+      <input type="date" id="toDate">
+    </div>
+    <div class="filter-group">
+      <label>Channel</label>
+      <select id="channelFilter">
+        <option value="all">All Channels</option>
+        <option value="online">Online Only</option>
+        <option value="pos">POS-grouped Only</option>
+      </select>
+    </div>
+    <button class="btn" id="btnLoad" onclick="loadReport()">
+      <span id="btnText">Generate Report</span>
+    </button>
+    <button class="btn btn-outline btn-sm" onclick="exportCSV()" id="btnCSV" style="display:none">
+      &#128229; Export CSV
+    </button>
+  </div>
+</div>
+
+<!-- ERROR -->
+<div id="errorBar" class="error-bar" style="display:none"></div>
+
+<!-- SUMMARY CARDS -->
+<div class="cards" id="summaryCards" style="display:none">
+  <div class="glass card">
+    <div class="card-label">Total Orders</div>
+    <div class="card-value purple" id="cOrders">0</div>
+  </div>
+  <div class="glass card">
+    <div class="card-label">Gross Sales</div>
+    <div class="card-value peach" id="cGross">AED 0</div>
+  </div>
+  <div class="glass card">
+    <div class="card-label">Discounts</div>
+    <div class="card-value red" id="cDisc">AED 0</div>
+  </div>
+  <div class="glass card">
+    <div class="card-label">Net Sales</div>
+    <div class="card-value peach" id="cNet">AED 0</div>
+  </div>
+  <div class="glass card">
+    <div class="card-label">Upsell Revenue</div>
+    <div class="card-value green" id="cUpsell">AED 0</div>
+  </div>
+  <div class="glass card">
+    <div class="card-label">Shipping Charged</div>
+    <div class="card-value green" id="cShip">AED 0</div>
+  </div>
+  <div class="glass card">
+    <div class="card-label">Final Sales</div>
+    <div class="card-value purple" id="cFinal">AED 0</div>
+  </div>
+  <div class="glass card" id="cogsCard" style="display:none">
+    <div class="card-label">COGS</div>
+    <div class="card-value red" id="cCOGS">AED 0</div>
+  </div>
+  <div class="glass card" id="gpCard" style="display:none">
+    <div class="card-label">Gross Profit</div>
+    <div class="card-value green" id="cGP">AED 0</div>
+  </div>
+</div>
+
+<!-- BREAKDOWN -->
+<div class="breakdown" id="breakdownSection" style="display:none">
+  <div class="breakdown-grid">
+    <div class="glass">
+      <div class="bd-title"><span class="dot dot-all"></span> Combined</div>
+      <div id="bdAll"></div>
+    </div>
+    <div class="glass">
+      <div class="bd-title"><span class="dot dot-online"></span> Online</div>
+      <div id="bdOnline"></div>
+    </div>
+    <div class="glass">
+      <div class="bd-title"><span class="dot dot-pos"></span> POS-grouped</div>
+      <div id="bdPOS"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CHARTS -->
+<div class="chart-section" id="chartsSection" style="display:none">
+  <div class="glass">
+    <div style="margin-bottom:10px;font-weight:700;font-size:.9em;color:var(--brand-peach)">Channel Split</div>
+    <div class="chart-box"><canvas id="pieChart"></canvas></div>
+  </div>
+  <div class="glass">
+    <div style="margin-bottom:10px;font-weight:700;font-size:.9em;color:var(--brand-green)">Sales Breakdown</div>
+    <div class="chart-box"><canvas id="barChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ORDERS TABLE -->
+<div class="table-section" id="tableSection" style="display:none">
+  <div class="glass">
+    <div style="margin-bottom:12px;font-weight:700;font-size:.95em;color:var(--brand-purple)">
+      Order Details · <span id="orderCount">0</span> orders
+    </div>
+    <div class="table-wrap table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Order</th>
+            <th>Date</th>
+            <th>Channel</th>
+            <th>Source</th>
+            <th>Customer</th>
+            <th>City</th>
+            <th class="num">Gross</th>
+            <th class="num">Disc.</th>
+            <th class="num">Net</th>
+            <th class="num">Upsell</th>
+            <th class="num">Ship</th>
+            <th class="num">Final</th>
+            <th class="num cogs-col" style="display:none">COGS</th>
+            <th class="num gp-col" style="display:none">Profit</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const today = new Date();
+const y = today.getFullYear(), m = today.getMonth();
+const first = new Date(y, m, 1);
+function fmt(d){return d.toISOString().slice(0,10)}
+document.getElementById('fromDate').value = fmt(first);
+document.getElementById('toDate').value   = fmt(today);
+
+let reportData = null;
+
+function showError(msg){
+  const e = document.getElementById('errorBar');
+  e.textContent = msg; e.style.display = 'block';
+  setTimeout(()=>{e.style.display='none'},6000);
+}
+
+async function loadReport(){
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  const ch   = document.getElementById('channelFilter').value;
+  if(!from||!to) return showError('Please select both dates.');
+
+  const btn  = document.getElementById('btnLoad');
+  const txt  = document.getElementById('btnText');
+  btn.disabled = true;
+  txt.innerHTML = '<span class="spinner"></span> Loading…';
+
+  try{
+    const r = await fetch('/api/profit-report',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({from_date:from,to_date:to,channel:ch})
+    });
+    const data = await r.json();
+    if(data.status==='error') throw new Error(data.message||'Server error');
+    if(data.status==='not_configured') throw new Error('Shopify API not configured. Check .env.');
+    reportData = data;
+    render(data);
+  }catch(e){
+    showError(e.message);
+  }finally{
+    btn.disabled = false;
+    txt.textContent = 'Generate Report';
+  }
+}
+
+function render(d){
+  const s = d.summary;
+  const showCogs = s.cogs_available;
+  ['summaryCards','breakdownSection','chartsSection','tableSection','btnCSV']
+    .forEach(id=>document.getElementById(id).style.display='');
+  document.getElementById('cOrders').textContent = s.total_orders.toLocaleString();
+  document.getElementById('cGross').textContent  = 'AED '+s.gross_sales.toLocaleString();
+  document.getElementById('cDisc').textContent   = 'AED '+s.discounts.toLocaleString();
+  document.getElementById('cNet').textContent    = 'AED '+s.net_sales.toLocaleString();
+  document.getElementById('cUpsell').textContent = 'AED '+s.upsell.toLocaleString();
+  document.getElementById('cShip').textContent   = 'AED '+s.shipping_charged.toLocaleString();
+  document.getElementById('cFinal').textContent  = 'AED '+s.final_sales.toLocaleString();
+
+  if(showCogs){
+    document.getElementById('cogsCard').style.display='';
+    document.getElementById('gpCard').style.display='';
+    document.getElementById('cCOGS').textContent = 'AED '+s.cogs_total.toLocaleString();
+    document.getElementById('cGP').textContent   = 'AED '+s.gross_profit.toLocaleString();
+  }
+
+  function bdRows(obj){
+    return [
+      ['Orders',      obj.total_orders],
+      ['Gross Sales', 'AED '+obj.gross_sales.toLocaleString()],
+      ['Net Sales',   'AED '+obj.net_sales.toLocaleString()],
+      ['Upsell',      'AED '+obj.upsell.toLocaleString()],
+      ['Shipping',    'AED '+obj.shipping_charged.toLocaleString()],
+      ['Final Sales', 'AED '+obj.final_sales.toLocaleString()],
+    ].map(r=>`<div class="bd-row"><span>${r[0]}</span><span>${r[1]}</span></div>`).join('');
+  }
+  document.getElementById('bdAll').innerHTML     = bdRows(s);
+  document.getElementById('bdOnline').innerHTML  = bdRows(d.online);
+  document.getElementById('bdPOS').innerHTML     = bdRows(d.pos); 
+
+  if(window._pie) window._pie.destroy();
+  window._pie = new Chart(document.getElementById('pieChart'),{
+    type:'doughnut',
+    data:{
+      labels:['Online','POS-grouped'],
+      datasets:[{data:[d.online.final_sales, d.pos.final_sales],backgroundColor:['#b8d58d','#ffd6a5'],borderWidth:0}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#f8fafc'}}}}
+  });
+
+  if(window._bar) window._bar.destroy();
+  window._bar = new Chart(document.getElementById('barChart'),{
+    type:'bar',
+    data:{
+      labels:['Gross','Discounts','Net','Upsell','Shipping','Final'],
+      datasets:[{label:'AED',data:[s.gross_sales,-s.discounts,s.net_sales,s.upsell,s.shipping_charged,s.final_sales],backgroundColor:['#ffd6a5','#ef4444','#ffd6a5','#b8d58d','#b8d58d','#bdb2ff'],borderRadius:6}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#f8fafc'}},y:{ticks:{color:'#f8fafc'}}}}
+  });
+
+  const orders = d.orders||[];
+  document.getElementById('orderCount').textContent = orders.length;
+  const tbody = document.getElementById('tableBody');
+  if(!orders.length){
+    tbody.innerHTML='<tr><td colspan="15" class="empty">No orders found for this period.</td></tr>';
+  }else{
+    tbody.innerHTML = orders.map((o,i)=>{
+      const chCls = o.channel_group==='Online'?'ch-online':'ch-pos';
+      let row = `<tr><td>${i+1}</td><td>${o.order_number||''}</td><td>${(o.order_date||'').slice(0,10)}</td><td class="${chCls}">${o.channel_group}</td><td>${o.channel_source}</td><td>${o.customer_name}</td><td>${o.shipping_city}</td><td class="num">${o.gross_sales.toLocaleString()}</td><td class="num">${o.discounts.toLocaleString()}</td><td class="num">${o.net_sales.toLocaleString()}</td><td class="num">${o.upsell.toLocaleString()}</td><td class="num">${o.shipping_charge.toLocaleString()}</td><td class="num" style="font-weight:700">${o.final_sales.toLocaleString()}</td>`;
+      if(showCogs){row += `<td class="num cogs-col">${o.cogs!=null?o.cogs.toLocaleString():'N/A'}</td><td class="num gp-col" style="font-weight:700">${o.gross_profit!=null?o.gross_profit.toLocaleString():'N/A'}</td>`};
+      row += '</tr>'; return row;
+    }).join('');
+  }
+  document.querySelectorAll('.cogs-col,.gp-col').forEach(el=>{el.style.display = showCogs ? '' : 'none'});
+}
+
+function exportCSV(){
+  if(!reportData||!reportData.orders) return showError('Load a report first.');
+  const orders = reportData.orders;
+  const fields = ['order_number','order_date','channel_group','channel_source','customer_name','shipping_city','gross_sales','discounts','net_sales','upsell','shipping_charge','final_sales'];
+  if(reportData.summary.cogs_available) fields.push('cogs','gross_profit');
+  let csv = fields.join(',')+'\n';
+  orders.forEach(o=>{csv += fields.map(f=>{let v=o[f];if(v==null)v='N/A';v=String(v).replace(/"/g,'""'); if(v.includes(',')) v='"'+v+'"'; return v;}).join(',')+'\n'});
+  const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `profit-report-${document.getElementById('fromDate').value}-to-${document.getElementById('toDate').value}.csv`;
+  a.click();
+}
+
+document.getElementById('channelFilter').addEventListener('change',()=>{if(reportData) loadReport();});
+</script>
+</body>
+</html>
