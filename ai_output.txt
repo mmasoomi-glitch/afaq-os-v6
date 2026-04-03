@@ -1,0 +1,40 @@
+COMMAND: dir
+TIME: 08:43:25
+--------------------------------------------------
+ Volume in drive C has no label.
+ Volume Serial Number is 626E-FC7C
+
+ Directory of C:\Users\HI\Desktop\attendance
+
+02/04/2026  08:43 AM    <DIR>          .
+02/04/2026  08:31 AM    <DIR>          ..
+01/04/2026  07:28 PM               344 .env
+01/04/2026  05:03 PM               437 .gitignore
+26/03/2026  08:11 PM                 4 .startup_done
+26/03/2026  07:44 PM    <DIR>          .venv
+26/03/2026  08:11 PM             1,688 .windsurfrules
+26/03/2026  08:11 PM             1,644 afaq-brand.css
+26/03/2026  08:11 PM               716 AfaqAttendance.spec
+26/03/2026  08:11 PM            14,815 AfaqAttendance_UserGuide.docx
+01/04/2026  07:37 PM            33,487 afaq_attendance.py
+02/04/2026  08:36 AM           262,144 afaq_tactical.db
+02/04/2026  08:35 AM           725,178 afaq_tactical.log
+02/04/2026  08:43 AM             2,088 ai_hands.py
+26/03/2026  08:30 PM    <DIR>          app
+01/04/2026  05:36 PM            11,317 attendance_data.json
+26/03/2026  08:11 PM        48,705,951 Backup attendance broken QR code.zip
+01/04/2026  07:06 PM             7,203 bootstrap_shopify.py
+26/03/2026  08:30 PM    <DIR>          core
+26/03/2026  08:11 PM                 0 python
+27/03/2026  02:59 AM                90 requirements.txt
+27/03/2026  02:59 AM             4,326 run.py
+01/04/2026  07:06 PM    <DIR>          services
+12/03/2026  03:00 PM    <DIR>          session
+26/03/2026  08:11 PM             1,129 SETUP_TASK_SCHEDULER.bat
+26/03/2026  08:11 PM               801 Startgem.bat
+01/04/2026  07:03 PM    <DIR>          static
+26/03/2026  08:28 PM    <DIR>          templates
+01/04/2026  07:03 PM    <DIR>          whatsapp-bridge
+02/04/2026  08:20 AM    <DIR>          __pycache__
+              19 File(s)     49,773,362 bytes
+              11 Dir(s)  54,960,652,288 bytes free

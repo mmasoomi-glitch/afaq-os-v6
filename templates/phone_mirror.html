@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Afaq — Phone Mirror</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--brand-peach:#ffd6a5;--brand-green:#b8d58d;--brand-purple:#bdb2ff;--bg-dark:#0f172a;--text-light:#f8fafc}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Montserrat',sans-serif;background:var(--bg-dark);color:var(--text-light);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px}
+.glass{background:rgba(30,41,59,.7);backdrop-filter:blur(10px);border:1px solid rgba(189,178,255,.3);border-radius:1rem;box-shadow:0 10px 25px -5px rgba(0,0,0,.5);padding:1.5rem}
+.btn{background:linear-gradient(135deg,var(--brand-green),var(--brand-purple));color:#001a0e;font-weight:700;border:none;border-radius:.5rem;padding:.65rem 1.2rem;cursor:pointer;font-family:'Montserrat',sans-serif;font-size:.85rem;display:inline-block;text-align:center;transition:transform .15s}
+.btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+.btn:disabled{opacity:.5;cursor:wait}
+.btn-red{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
+.btn-sm{padding:.4rem .8rem;font-size:.75rem}
+.back-link{color:var(--brand-purple);text-decoration:none;font-weight:600;font-size:.9em;margin-bottom:12px}
+.back-link:hover{text-decoration:underline}
+.brand-logo{max-height:40px;display:block;margin:0 auto 8px}
+.header{text-align:center;margin-bottom:16px}
+.status-bar{text-align:center;margin-bottom:12px;font-size:.82em}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.dot-off{background:#ef4444}.dot-on{background:var(--brand-green)}
+#device-info{opacity:.7;font-size:.78em}
+.controls-top{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+#wrap{position:relative;display:inline-block;border:2px solid rgba(189,178,255,.3);border-radius:12px;overflow:hidden;background:#000;max-width:95vw}
+#screen{display:block;max-height:70vh;width:auto;cursor:crosshair}
+#screen.off{display:none}
+#no-connect{text-align:center;padding:60px 20px;font-size:1.1em;opacity:.6}
+.nav-row{display:flex;gap:8px;margin-top:12px;justify-content:center;flex-wrap:wrap}
+.nav-btn{background:rgba(30,41,59,.8);border:1px solid rgba(189,178,255,.3);color:var(--text-light);border-radius:50%;width:48px;height:48px;font-size:1.2em;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.nav-btn:hover{background:rgba(189,178,255,.2)}
+.nav-btn:active{background:var(--brand-purple);color:#0f172a}
+.text-row{display:flex;gap:8px;margin-top:10px;width:100%;max-width:400px}
+.text-input{flex:1;background:rgba(15,23,42,.6);border:1px solid rgba(189,178,255,.3);color:var(--text-light);padding:8px 12px;border-radius:.5rem;font-family:'Montserrat',sans-serif;font-size:.85rem;outline:none}
+.text-input:focus{border-color:var(--brand-peach)}
+.keyboard-hint{font-size:.7em;opacity:.5;margin-top:8px;text-align:center}
+@media(max-width:600px){#screen{max-height:60vh}.nav-btn{width:42px;height:42px;font-size:1em}}
+</style>
+</head>
+<body>
+
+<a href="/" class="back-link">&larr; Back to Dashboard</a>
+<img class="brand-logo" src="https://cdn.shopify.com/s/files/1/0911/0215/0954/files/Afaq_official_logo.png?v=1770887488" alt="Logo">
+<div class="header" style="font-size:1.1em;font-weight:700;color:var(--brand-peach)">Phone Mirror</div>
+
+<div class="status-bar glass" style="display:inline-block;padding:8px 20px">
+  <span class="dot dot-off" id="statusDot"></span>
+  <span id="statusText">Checking connection...</span>
+  <span id="device-info"></span>
+</div>
+
+<div class="controls-top">
+  <button class="btn btn-sm" id="btnConnect" onclick="doConnect()">Connect</button>
+  <button class="btn btn-red btn-sm" id="btnDisconnect" onclick="doDisconnect()" style="display:none">Disconnect</button>
+  <button class="btn btn-sm" onclick="checkStatus()">Refresh</button>
+</div>
+
+<div id="wrap">
+  <img id="screen" class="off" src="" draggable="false"/>
+  <div id="no-connect">Phone not connected.<br>Click Connect above.</div>
+</div>
+
+<div class="nav-row">
+  <button class="nav-btn" onclick="sendKey('KEYCODE_BACK')" title="Back">◀</button>
+  <button class="nav-btn" onclick="sendKey('KEYCODE_HOME')" title="Home">⬤</button>
+  <button class="nav-btn" onclick="sendKey('KEYCODE_APP_SWITCH')" title="Recent Apps">▣</button>
+  <button class="nav-btn" onclick="sendKey('KEYCODE_POWER')" title="Power">⏻</button>
+  <button class="nav-btn" onclick="sendKey('KEYCODE_VOLUME_UP')" title="Vol Up">🔊</button>
+  <button class="nav-btn" onclick="sendKey('KEYCODE_VOLUME_DOWN')" title="Vol Down">🔉</button>
+</div>
+
+<div class="text-row">
+  <input type="text" class="text-input" id="textIn" placeholder="Type text, press Enter to send..." onkeypress="if(event.key==='Enter'){sendText();this.value=''}"/>
+  <button class="btn btn-sm" onclick="sendText()">Send</button>
+</div>
+<div class="keyboard-hint">You can also type directly — keyboard keys are sent to the phone</div>
+
+<script>
+const img = document.getElementById('screen');
+const noConn = document.getElementById('no-connect');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const deviceInfo = document.getElementById('device-info');
+const btnConn = document.getElementById('btnConnect');
+const btnDisc = document.getElementById('btnDisconnect');
+
+let touchStartX, touchStartY, touchStartTime;
+let isConnected = false;
+
+async function checkStatus(){
+  try{
+    const r = await fetch('/phone-status');
+    const d = await r.json();
+    isConnected = d.connected;
+    if(d.connected){
+      statusDot.className='dot dot-on';
+      statusText.textContent='Connected';
+      deviceInfo.textContent=' — '+d.device;
+      img.classList.remove('off');
+      img.src='/phone-stream?'+Date.now();
+      noConn.style.display='none';
+      btnConn.style.display='none';
+      btnDisc.style.display='';
+    } else {
+      statusDot.className='dot dot-off';
+      statusText.textContent=d.msg||'Disconnected';
+      deviceInfo.textContent='';
+      img.classList.add('off');
+      noConn.style.display='';
+      btnConn.style.display='';
+      btnDisc.style.display='none';
+    }
+  } catch(e){
+    statusText.textContent='Error checking status';
+  }
+}
+
+async function doConnect(){
+  statusText.textContent='Connecting...';
+  btnConn.disabled=true;
+  try{
+    const r = await fetch('/phone-connect',{method:'POST'});
+    const d = await r.json();
+    statusText.textContent=d.msg;
+    setTimeout(checkStatus,2000);
+  } catch(e){
+    statusText.textContent='Connection error';
+  } finally{ btnConn.disabled=false; }
+}
+
+async function doDisconnect(){ await fetch('/phone-disconnect',{method:'POST'}); checkStatus(); }
+
+function getCoords(e){
+  const rect=img.getBoundingClientRect();
+  const sx=1080/rect.width, sy=2340/rect.height;
+  const cx=e.touches?e.touches[0].clientX:e.clientX;
+  const cy=e.touches?e.touches[0].clientY:e.clientY;
+  return {x:Math.round((cx-rect.left)*sx), y:Math.round((cy-rect.top)*sy)};
+}
+
+function sendTap(x,y){fetch('/phone-tap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x,y})});}
+function sendSwipe(x1,y1,x2,y2,dur){fetch('/phone-swipe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x1,y1,x2,y2,duration:dur||300})});}
+function sendKey(key){fetch('/phone-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});}
+function sendText(){const t=document.getElementById('textIn').value; if(!t)return;fetch('/phone-text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}); document.getElementById('textIn').value='';}
+
+img.addEventListener('mousedown',e=>{const c=getCoords(e);touchStartX=c.x;touchStartY=c.y;touchStartTime=Date.now();e.preventDefault();});
+img.addEventListener('mouseup',e=>{const c=getCoords(e),dt=Date.now()-touchStartTime; const dx=Math.abs(c.x-touchStartX),dy=Math.abs(c.y-touchStartY); if(dx<20&&dy<20) sendTap(touchStartX,touchStartY); else sendSwipe(touchStartX,touchStartY,c.x,c.y,dt); e.preventDefault();});
+img.addEventListener('touchstart',e=>{const c=getCoords(e);touchStartX=c.x;touchStartY=c.y;touchStartTime=Date.now();e.preventDefault();},{passive:false});
+img.addEventListener('touchend',e=>{const t=e.changedTouches[0],rect=img.getBoundingClientRect(); const sx=1080/rect.width,sy=2340/rect.height; const x=Math.round((t.clientX-rect.left)*sx),y=Math.round((t.clientY-rect.top)*sy); const dt=Date.now()-touchStartTime,dx=Math.abs(x-touchStartX),dy=Math.abs(y-touchStartY); if(dx<20&&dy<20) sendTap(touchStartX,touchStartY); else sendSwipe(touchStartX,touchStartY,x,y,dt); e.preventDefault();},{passive:false});
+
+document.addEventListener('keydown',e=>{const map={'Backspace':'KEYCODE_DEL','Enter':'KEYCODE_ENTER','Escape':'KEYCODE_BACK','ArrowUp':'KEYCODE_DPAD_UP','ArrowDown':'KEYCODE_DPAD_DOWN','ArrowLeft':'KEYCODE_DPAD_LEFT','ArrowRight':'KEYCODE_DPAD_RIGHT'}; if(map[e.key]){sendKey(map[e.key]); return;} if(e.key.length===1&&!e.ctrlKey&&!e.metaKey){fetch('/phone-text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:e.key})});}});
+
+setInterval(()=>{if(isConnected) img.src='/phone-stream?'+Date.now()},5000);
+checkStatus();
+setInterval(checkStatus,15000);
+</script>
+</body>
+</html>

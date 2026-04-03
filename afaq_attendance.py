@@ -2,6 +2,7 @@ import json, os, sys, threading, webbrowser, socket, platform, subprocess, reque
 import google.generativeai as genai
 from services.shopify_ai_agent import ShopifyAIAgent
 from services.shopify_profit import ProfitEngine
+from services.phone_mirror import PhoneMirror, register_phone_routes
 from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, Response, jsonify, redirect, session
 
@@ -643,6 +644,18 @@ def api_profit_report():
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
+
+# ── Phone Mirror ──
+phone = PhoneMirror(device_ip="100.97.73.38", port=5555)
+register_phone_routes(manager_app, phone)
+
+@manager_app.route('/phone')
+def phone_page():
+    tpl = os.path.join(BASE_DIR, 'templates', 'phone_mirror.html')
+    if os.path.exists(tpl):
+        with open(tpl, 'r', encoding='utf-8') as f:
+            return f.read()
+    return "<h1>Phone mirror template not found</h1>"
 
 if __name__ == '__main__':
     threading.Thread(target=run_manager_app, daemon=True).start()

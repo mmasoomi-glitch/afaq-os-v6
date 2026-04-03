@@ -1,1 +1,1 @@
-"""Services for the Afaq Attendance application."""
+# services package
